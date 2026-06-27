@@ -1,0 +1,35 @@
+name: Deploy site
+
+# Auto-deploy the sealbox.dev marketing + waitlist site to Cloudflare Pages on
+# push to main. Mirrors the minspec monorepo's deploy-sites.yml.
+#   sites/sealbox.dev  ->  sealbox-dev  (sealbox.dev)
+# CF Pages only uploads changed files. Needs repo secret CLOUDFLARE_API_TOKEN.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sites/**'
+      - '.github/workflows/deploy-site.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-site-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Deploy sealbox-dev
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          npx --yes wrangler@4 pages deploy "sites/sealbox.dev" \
+            --project-name="sealbox-dev" \
+            --branch=main \
+            --commit-dirty=true

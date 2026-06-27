@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SealBox — the coding agent that can't betray you</title>
+  <meta name="description" content="SealBox runs your autonomous coding agent in a sealed box: credential-free, no network except a brokered model call, and it can't push without your review. Coming soon — join the waitlist.">
+  <meta name="theme-color" content="#0d0f14">
+  <link rel="canonical" href="https://sealbox.dev">
+  <meta name="robots" content="index, follow">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <meta property="og:title" content="SealBox — autonomy you can trust, because it's sealed">
+  <meta property="og:description" content="An autonomous coding agent that physically cannot read your secrets, hold your tokens, or push without review. Credential-free by design. Coming soon.">
+  <meta property="og:url" content="https://sealbox.dev">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="SealBox">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://auditandfix.com/#organization",
+        "name": "Audit&Fix",
+        "url": "https://auditandfix.com",
+        "sameAs": ["https://minspec.dev", "https://scroogellm.com"]
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://sealbox.dev/#website",
+        "url": "https://sealbox.dev",
+        "name": "SealBox",
+        "publisher": { "@id": "https://auditandfix.com/#organization" }
+      }
+    ]
+  }
+  </script>
+  <style>
+    :root {
+      --bg: #0d0f14;
+      --bg-surface: #14171f;
+      --bg-card: #181c26;
+      --border: #272b38;
+      --text: #e4e7ee;
+      --text-muted: #8a8fa3;
+      --text-dim: #6e7385;
+      --accent: #2dd4bf;
+      --accent-bright: #5eead4;
+      --accent-dim: #14b8a6;
+      --accent-glow: rgba(45, 212, 191, 0.13);
+      --amber: #e5a84b;
+      --radius: 10px;
+      --max-width: 880px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; overflow-x: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.6; -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); }
+
+    nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(13, 15, 20, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border); }
+    .nav-inner { max-width: var(--max-width); margin: 0 auto; padding: 0 24px; height: 56px;
+      display: flex; align-items: center; justify-content: space-between; }
+    .nav-logo { display: inline-flex; align-items: center; gap: 9px; font-size: 1.1rem; font-weight: 700;
+      color: var(--text); text-decoration: none; letter-spacing: -0.02em; }
+    .nav-logo-icon { height: 26px; width: 26px; display: block; }
+    .nav-logo-text span { color: var(--accent); }
+    .nav-links { display: flex; gap: 24px; list-style: none; }
+    .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 0.875rem; transition: color 0.2s; }
+    .nav-links a:hover { color: var(--text); }
+
+    .hero { min-height: 100vh; display: flex; align-items: center; justify-content: center; text-align: center;
+      padding: 96px 24px 60px; position: relative; overflow: hidden; }
+    .hero::before { content: ""; position: absolute; top: -140px; left: 50%; transform: translateX(-50%);
+      width: 640px; height: 640px; max-width: 100vw;
+      background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+      animation: pulse 6s ease-in-out infinite; pointer-events: none; }
+    @keyframes pulse { 0%,100% { opacity: 0.5; transform: translateX(-50%) scale(1); }
+      50% { opacity: 1; transform: translateX(-50%) scale(1.15); } }
+    .hero-content { position: relative; z-index: 1; max-width: 640px; }
+    .hero-badge { display: inline-block; padding: 4px 14px; background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 20px; font-size: 0.8rem; color: var(--accent-bright); margin-bottom: 28px; letter-spacing: 0.02em; }
+    .hero h1 { font-size: clamp(2.3rem, 6vw, 3.5rem); font-weight: 800; line-height: 1.1; letter-spacing: -0.03em; margin-bottom: 16px; }
+    .hero h1 .accent { color: var(--accent); }
+    .hero-tagline { font-size: clamp(1.05rem, 2.5vw, 1.3rem); color: var(--text-muted); font-weight: 400;
+      margin-bottom: 36px; line-height: 1.5; }
+
+    /* waitlist form */
+    .waitlist { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; max-width: 460px; margin: 0 auto; }
+    .waitlist input[type=email] { flex: 1 1 240px; min-width: 0; padding: 13px 16px; font-size: 0.95rem;
+      background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text); }
+    .waitlist input[type=email]:focus { outline: none; border-color: var(--accent-dim); box-shadow: 0 0 0 3px var(--accent-glow); }
+    .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 13px 26px;
+      border-radius: 8px; font-size: 0.95rem; font-weight: 600; text-decoration: none; transition: all 0.2s; border: none; cursor: pointer; }
+    .btn-primary { background: var(--accent); color: #07120f; }
+    .btn-primary:hover { background: var(--accent-bright); box-shadow: 0 0 24px var(--accent-glow); }
+    .btn-primary:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
+    .form-note { margin-top: 16px; font-size: 0.8rem; color: var(--text-dim); }
+    .form-msg { margin-top: 16px; font-size: 0.9rem; min-height: 1.2em; }
+    .form-msg.ok { color: var(--accent-bright); }
+    .form-msg.err { color: var(--amber); }
+
+    section { padding: 84px 24px; }
+    .section-inner { max-width: var(--max-width); margin: 0 auto; }
+    .section-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); margin-bottom: 12px; text-align: center; }
+    .section-title { font-size: clamp(1.5rem, 4vw, 2rem); font-weight: 700; letter-spacing: -0.02em; margin-bottom: 14px; text-align: center; }
+    .section-desc { color: var(--text-muted); max-width: 580px; margin: 0 auto 48px; font-size: 1.02rem; text-align: center; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+    .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; }
+    .card h3 { font-size: 1.02rem; font-weight: 650; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .card h3 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); flex: none; }
+    .card p { color: var(--text-muted); font-size: 0.92rem; }
+
+    .family { background: var(--bg-surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .family .grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .family .card { background: transparent; border-color: var(--border); }
+    .family .verb { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); }
+    .family .name { font-size: 1.15rem; font-weight: 700; margin: 4px 0 6px; }
+    .family .name.cur { color: var(--accent); }
+
+    footer { padding: 48px 24px; border-top: 1px solid var(--border); text-align: center; color: var(--text-dim); font-size: 0.85rem; }
+    footer a { color: var(--text-muted); text-decoration: none; margin: 0 10px; }
+    footer a:hover { color: var(--text); }
+    .footer-legal { margin-top: 14px; font-size: 0.78rem; }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="nav-inner">
+      <a class="nav-logo" href="/">
+        <svg class="nav-logo-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <rect x="5" y="11" width="22" height="16" rx="3" fill="#181c26" stroke="#2dd4bf" stroke-width="2"/>
+          <path d="M11 11V8a5 5 0 0 1 10 0v3" stroke="#2dd4bf" stroke-width="2" fill="none"/>
+          <circle cx="16" cy="18" r="2.4" fill="#2dd4bf"/>
+          <rect x="15" y="19" width="2" height="4" rx="1" fill="#2dd4bf"/>
+        </svg>
+        <span class="nav-logo-text">Seal<span>Box</span></span>
+      </a>
+      <ul class="nav-links">
+        <li><a href="#how">How it's sealed</a></li>
+        <li><a href="#family">The line</a></li>
+        <li><a href="#waitlist-top">Waitlist</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <header class="hero" id="waitlist-top">
+    <div class="hero-content">
+      <span class="hero-badge">Coming soon · join the waitlist</span>
+      <h1>The coding agent that <span class="accent">can't betray you</span>.</h1>
+      <p class="hero-tagline">SealBox runs your autonomous agent in a sealed box — credential-free, no network beyond one brokered model call, and it <strong>can't push without your review</strong>. Not a promise. A boundary.</p>
+      <form class="waitlist" id="waitlist-form" method="POST" action="/api/waitlist" novalidate>
+        <label class="hp" for="website">Leave this empty</label>
+        <input class="hp" type="text" id="website" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <input type="email" id="email" name="email" placeholder="you@company.com" required autocomplete="email" aria-label="Email address">
+        <button class="btn btn-primary" type="submit" id="waitlist-submit">Join the waitlist</button>
+      </form>
+      <p class="form-msg" id="waitlist-msg" role="status" aria-live="polite"></p>
+      <p class="form-note">No spam. One email when SealBox opens. Unsubscribe anytime.</p>
+    </div>
+  </header>
+
+  <section id="how">
+    <div class="section-inner">
+      <p class="section-label">Sealed by construction</p>
+      <h2 class="section-title">Trust isn't a prompt. It's a boundary.</h2>
+      <p class="section-desc">Most coding agents run with <em>your</em> credentials — your <code>gh</code> token, your <code>~/.ssh</code>, your cloud keys. SealBox is built so the agent simply never has them.</p>
+      <div class="grid">
+        <div class="card">
+          <h3><span class="dot"></span>Credential-free</h3>
+          <p>The agent runs in an isolated box with no host secrets — no tokens, no keys, no <code>~/.claude</code>. It can't read what it was never given.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot"></span>No egress but the model</h3>
+          <p>The only outbound path is a host-side broker for the model call. A prompt injection can't phone home, because there's nowhere to call.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot"></span>It can't push</h3>
+          <p>Work leaves as a diff your machine reviews and pushes. The agent never holds the token to ship code over your head.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot"></span>Attested, not assumed</h3>
+          <p>Before any run, the boundary is probed and must fail closed. If the box <em>can</em> reach out, the job aborts — security isn't inferred from a dead test.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot"></span>It stops to ask</h3>
+          <p>Trivial work runs; complex or risky work waits for a human. Tier-gated review by design — autonomy you can trust because it knows when to halt.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot"></span>Untrusted input is data</h3>
+          <p>Issue and spec text is treated as data to review, never instructions to obey. The worst an injection earns is a bad suggestion — never an action.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="family" id="family">
+    <div class="section-inner">
+      <p class="section-label">One toolchain, three verbs</p>
+      <h2 class="section-title">SealBox is the <span style="color:var(--accent)">Execute</span> step.</h2>
+      <p class="section-desc">Specify what to build, optimize what it costs, then execute it safely. Each ships on its own; together they're the pipeline.</p>
+      <div class="grid">
+        <div class="card">
+          <p class="verb">Specify</p>
+          <p class="name">MinSpec</p>
+          <p>Adaptive spec-driven development. Just enough ceremony for the change in front of you. <a href="https://minspec.dev">minspec.dev →</a></p>
+        </div>
+        <div class="card">
+          <p class="verb">Optimize</p>
+          <p class="name">ScroogeLLM</p>
+          <p>Route, cache, and measure every model call so cheap work runs on cheap models. <a href="https://scroogellm.com">scroogellm.com →</a></p>
+        </div>
+        <div class="card">
+          <p class="verb">Execute</p>
+          <p class="name cur">SealBox</p>
+          <p>Issue → spec → code → PR, run by an agent that physically can't touch your secrets. You're here.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div>
+      <a href="https://minspec.dev">MinSpec</a>
+      <a href="https://scroogellm.com">ScroogeLLM</a>
+      <a href="/privacy.html">Privacy</a>
+    </div>
+    <p class="footer-legal">© <span id="yr">2026</span> Audit&amp;Fix · SealBox is a forthcoming developer tool. Features described are the product's design intent, not a shipped guarantee.</p>
+  </footer>
+
+  <script src="/js/waitlist.js" defer></script>
+</body>
+</html>

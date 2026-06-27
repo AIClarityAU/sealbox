@@ -1,0 +1,18 @@
+# deps / build
+node_modules/
+dist/
+*.vsix
+
+# secrets — never commit (see Audit&Fix secret hygiene)
+.env
+.env.*
+.dev.vars
+*.local
+
+# cloudflare / wrangler
+.wrangler/
+.mf/
+
+# os / editor
+.DS_Store
+*.log

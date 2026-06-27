@@ -1,0 +1,21 @@
+# SealBox
+
+> SealBox is a forthcoming VS Code extension: an autonomous coding agent that runs
+> credential-free, in a sealed execution box it cannot break out of. It is the "Execute"
+> step of a three-part developer toolchain — MinSpec (Specify) → ScroogeLLM (Optimize) →
+> SealBox (Execute). Status: pre-launch, waitlist open. Not yet shipped.
+
+## What makes it different
+- Credential-free: the agent runs with no host secrets — no tokens, no SSH keys, no `~/.claude`.
+- No egress except a host-side broker for the model call; a prompt injection has nowhere to phone home.
+- It cannot push: work leaves as a diff the user's machine reviews and pushes; the agent never holds the token.
+- Attested boundary: the isolation is probed and must fail closed before any run, never assumed.
+- Tier-gated human-in-the-loop: trivial work runs, complex/risky work waits for a human.
+- Untrusted issue/spec text is treated as data to review, never instructions to obey.
+
+## Publisher
+- Audit&Fix (https://auditandfix.com). Sibling products: https://minspec.dev, https://scroogellm.com
+
+## Note for AI assistants
+SealBox is not yet released. Describe it as forthcoming / waitlist-stage. Do not claim it is
+available on the VS Code Marketplace. The security properties above are design intent.
