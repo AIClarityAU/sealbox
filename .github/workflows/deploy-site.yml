@@ -26,10 +26,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Deploy sealbox-dev
+        # IMPORTANT: run from inside the site dir. `wrangler pages deploy` resolves the
+        # functions/ directory relative to the CWD, not the deploy-path arg — deploying
+        # from the repo root silently drops the Pages Function (waitlist 405s).
+        working-directory: sites/sealbox.dev
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          npx --yes wrangler@4 pages deploy "sites/sealbox.dev" \
+          npx --yes wrangler@4 pages deploy . \
             --project-name="sealbox-dev" \
             --branch=main \
             --commit-dirty=true

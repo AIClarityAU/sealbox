@@ -79,8 +79,4 @@ export async function onRequestPost(context) {
   return reply(request, 200, { ok: true });
 }
 
-// Any non-POST method.
-export async function onRequest(context) {
-  if (context.request.method === "POST") return onRequestPost(context);
-  return new Response("Method Not Allowed", { status: 405, headers: { allow: "POST" } });
-}
+// Only POST is handled; Pages returns 405 for other methods automatically.
