@@ -1,0 +1,93 @@
+---
+description: Spec Kit slash command surface routed to MinSpec phases
+alwaysApply: false
+---
+
+<!-- >>> minspec:managed:slash-cursor >>> -->
+# Spec Kit Slash Commands (via MinSpec)
+
+When the user invokes one of the following commands, follow MinSpec's SDD phase methodology. The active spec is referenced in the `minspec:active-spec` block of `CLAUDE.md` or `.cursorrules`.
+
+## /specify
+
+*Start or update the Specify phase for the active MinSpec spec*
+
+Run the **Specify** phase of MinSpec SDD methodology.
+
+Read the active spec referenced in the `minspec:active-spec` block of `CLAUDE.md` / `AGENTS.md`. Open the corresponding file under the project `specs/` directory and fill in the Specify section: user-visible outcome, problem statement, constraints.
+
+Set valid frontmatter so the SPECS pane and the approve gate read it correctly: `status:` must be one of `new`, `specifying`, `implementing`, `done`, `archived` (an absent or unrecognized value is silently coerced to "new" and flagged at approve), and set an explicit `tier:` (one of `T1`, `T2`, `T3`, `T4`) — a missing tier is flagged too. Getting these right here is the point: the approve gate is only a backstop, not the place to discover gaps.
+
+Match ceremony to the spec's tier:
+- T1: one sentence
+- T2: short paragraph
+- T3/T4: thorough but bounded
+
+After the **Requirements** section, add a **`## Costly to Refactor`** section (read-first, placed after Requirements): a ranked list of the expensive-to-reverse commitments — contracts, cross-package boundaries, data-model/API changes — each with a one-line *why-costly* + *what to check*. `"Low — <reason>"` is valid when nothing is hard to undo. Author it last (once the requirements are stable); place it after Requirements.
+
+Also in Zone A, after Requirements, add a **`## Acceptance Criteria`** section that defines *done*: a checkbox list where each item is one line — a **bold short outcome name**, an em-dash, a plain-language observable outcome a reader can verify, and a parenthetical trace to the `FR`/`INV` it satisfies (e.g. `- [ ] **Honest degradation** — incoherent state surfaces "state unclear", never a fabricated next step. (FR-6)`). Tier-scaled: a couple of criteria is plenty for T1/T2 — don't bloat. See the **MinSpec: Generate Example Spec** output for the canonical format.
+
+Never violate invariants in `CLAUDE.md` or `.minspec/constitution.md`. Arguments: $ARGUMENTS
+
+## /clarify
+
+*Resolve open questions before planning*
+
+Run the **Clarify** phase. Required for T4, optional for T2/T3, skipped for T1.
+
+List concrete answerable questions blocking the plan. For each question add an answer or a follow-up task. Vague concerns belong in discussion, not here.
+
+Update the active spec's Clarify section. Arguments: $ARGUMENTS
+
+## /plan
+
+*Draft the technical approach for the active spec*
+
+Run the **Plan** phase. Required for T2+.
+
+Describe the technical approach, key decisions, and what is explicitly out of scope. Reference existing decisions in `docs/decisions/` rather than re-deciding.
+
+**Design-aspect artifacts (shift-left — the approve gate checks these at T3/T4).** If the spec has any of these surfaces, include the matching artifact now so approval finds nothing missing:
+- **ux** — Add a "## UX" section with a wireframe — an image (![…](…)), an ASCII layout box, or a ```mermaid``` diagram — before implementation.
+- **api** — Add request/response payload shapes — a ```json``` example or a ```ts``` interface/type — under an "## API" section.
+- **data** — Add the data shape — a ```sql``` DDL block, a ```mermaid erDiagram```, or a markdown table of columns.
+- **architecture** — Add a ```mermaid``` diagram, a linked .puml/.drawio, or an ASCII component diagram under "## Architecture".
+
+These are DESIGN-phase deliverables; in split-layout specs they live in `design.md`. T1 specs are exempt, T2 warns, T3/T4 block — so authoring them up front is what keeps approval clean.
+
+Honour the dependency budget recorded in `CLAUDE.md` (0-1 for simple, 2-3 for complex). Update the Plan section of the active spec. Arguments: $ARGUMENTS
+
+## /tasks
+
+*Break the plan into ordered, checkable tasks*
+
+Run the **Tasks** phase. Required for T3+.
+
+Break the plan into small, dependency-ordered checkboxes. Each task must be completable in one session and verifiable from outside.
+
+MinSpec tracks progress from these checkboxes — they must remain in standard markdown checkbox format (`- [ ]` / `- [x]`). Arguments: $ARGUMENTS
+
+## /analyze
+
+*Cross-check spec, plan, and tasks for consistency*
+
+Run the **Analyze** phase — cross-artifact consistency review before implementation.
+
+MinSpec's native phase list ends at `implement`; treat Analyze as a review pass over the active spec:
+1. Does every Plan decision trace to a Specify requirement?
+2. Does every Task implement part of the Plan?
+3. Are any invariants from `CLAUDE.md` at risk?
+4. Is the dependency budget respected?
+
+Output gaps and contradictions. Do not modify code. Arguments: $ARGUMENTS
+
+## /implement
+
+*Execute the task list against the active spec*
+
+Run the **Implement** phase. Required for T3+.
+
+Pick the next unchecked task in the active spec's Tasks section. Implement it, update the checkbox, and add a brief implementation note to the Implement section (decisions, gotchas, PR link).
+
+Respect file allowlists, invariants, and the dependency budget. If you cannot complete a task fully, escalate per `CLAUDE.md` rather than stub. Arguments: $ARGUMENTS
+<!-- <<< minspec:managed:slash-cursor <<< -->

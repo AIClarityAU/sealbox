@@ -1,0 +1,107 @@
+<svg width="2400" height="1400" viewBox="0 0 2400 1400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Abstract dark sealed enclosure hero background">
+  <defs>
+    <!-- Near-black base, deepening to the right -->
+    <linearGradient id="bgDepth" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0d0f14"/>
+      <stop offset="58%" stop-color="#0b0d12"/>
+      <stop offset="100%" stop-color="#06080c"/>
+    </linearGradient>
+
+    <!-- Gentle teal bloom -->
+    <radialGradient id="tealBloom" cx="34%" cy="28%" r="58%">
+      <stop offset="0%" stop-color="#2dd4bf" stop-opacity="0.16"/>
+      <stop offset="34%" stop-color="#2dd4bf" stop-opacity="0.07"/>
+      <stop offset="68%" stop-color="#2dd4bf" stop-opacity="0.025"/>
+      <stop offset="100%" stop-color="#2dd4bf" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Very soft secondary depth -->
+    <radialGradient id="rightVignette" cx="100%" cy="50%" r="80%">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0.28"/>
+      <stop offset="55%" stop-color="#000000" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Thin soft grid -->
+    <pattern id="softGrid" width="96" height="96" patternUnits="userSpaceOnUse">
+      <path d="M96 0H0V96" fill="none" stroke="#2dd4bf" stroke-width="1" stroke-opacity="0.035"/>
+    </pattern>
+
+    <!-- Smaller enclosure-like grid accents -->
+    <pattern id="microGrid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#5eead4" stroke-width="0.8" stroke-opacity="0.018"/>
+    </pattern>
+
+    <filter id="softBlur" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+
+    <filter id="ringBlur" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2.5"/>
+    </filter>
+
+    <!-- Fade motifs so center-left text stays clean -->
+    <linearGradient id="motifFade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="white" stop-opacity="0.36"/>
+      <stop offset="42%" stop-color="white" stop-opacity="0.22"/>
+      <stop offset="72%" stop-color="white" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0.06"/>
+    </linearGradient>
+
+    <mask id="fadeMask">
+      <rect width="2400" height="1400" fill="url(#motifFade)"/>
+    </mask>
+  </defs>
+
+  <!-- Base -->
+  <rect width="2400" height="1400" fill="url(#bgDepth)"/>
+  <rect width="2400" height="1400" fill="url(#tealBloom)"/>
+  <rect width="2400" height="1400" fill="url(#rightVignette)"/>
+
+  <!-- Atmospheric soft patches -->
+  <g opacity="0.38" filter="url(#softBlur)">
+    <ellipse cx="720" cy="260" rx="520" ry="250" fill="#2dd4bf" opacity="0.055"/>
+    <ellipse cx="1550" cy="1030" rx="620" ry="260" fill="#2dd4bf" opacity="0.026"/>
+    <ellipse cx="2240" cy="560" rx="360" ry="520" fill="#000000" opacity="0.28"/>
+  </g>
+
+  <!-- Subtle grid field -->
+  <g mask="url(#fadeMask)">
+    <rect width="2400" height="1400" fill="url(#softGrid)" opacity="0.92"/>
+    <rect width="2400" height="1400" fill="url(#microGrid)" opacity="0.55"/>
+  </g>
+
+  <!-- Sealed enclosure motifs: sparse, low-contrast angular lines -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.16">
+    <path d="M1420 210H1900L2070 380V760" stroke="#2dd4bf" stroke-width="1.2" stroke-opacity="0.20"/>
+    <path d="M1560 315H1850L1965 430V665" stroke="#5eead4" stroke-width="1" stroke-opacity="0.13"/>
+    <path d="M330 870H760L910 1020H1220" stroke="#2dd4bf" stroke-width="1.1" stroke-opacity="0.13"/>
+    <path d="M410 970H710L830 1090H1110" stroke="#5eead4" stroke-width="1" stroke-opacity="0.08"/>
+  </g>
+
+  <!-- Single off-side vault ring, intentionally faint -->
+  <g transform="translate(1845 805)" fill="none" filter="url(#ringBlur)">
+    <circle r="225" stroke="#2dd4bf" stroke-width="2.2" stroke-opacity="0.105"/>
+    <circle r="166" stroke="#5eead4" stroke-width="1.4" stroke-opacity="0.07"/>
+    <circle r="96" stroke="#2dd4bf" stroke-width="1.2" stroke-opacity="0.045"/>
+
+    <!-- Very subtle radial locking suggestions -->
+    <path d="M0 -225V-188" stroke="#2dd4bf" stroke-width="2" stroke-opacity="0.06" stroke-linecap="round"/>
+    <path d="M0 188V225" stroke="#2dd4bf" stroke-width="2" stroke-opacity="0.045" stroke-linecap="round"/>
+    <path d="M-225 0H-188" stroke="#2dd4bf" stroke-width="2" stroke-opacity="0.045" stroke-linecap="round"/>
+    <path d="M188 0H225" stroke="#2dd4bf" stroke-width="2" stroke-opacity="0.06" stroke-linecap="round"/>
+  </g>
+
+  <!-- Low contrast top-left enclosure outline, barely there -->
+  <g fill="none" stroke="#2dd4bf" stroke-width="1" stroke-opacity="0.055">
+    <rect x="180" y="150" width="820" height="420" rx="42"/>
+    <path d="M260 230H920V490H260Z" stroke-opacity="0.035"/>
+  </g>
+
+  <!-- Gentle vignette to keep text readable -->
+  <rect width="2400" height="1400" fill="#000000" opacity="0.08"/>
+  <radialGradient id="centerLift" cx="28%" cy="48%" r="44%">
+    <stop offset="0%" stop-color="#0d0f14" stop-opacity="0"/>
+    <stop offset="100%" stop-color="#000000" stop-opacity="0.18"/>
+  </radialGradient>
+</svg>

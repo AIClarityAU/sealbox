@@ -16,3 +16,7 @@ dist/
 # os / editor
 .DS_Store
 *.log
+
+# MinSpec ephemeral data
+.minspec/session.json
+.minspec/calibration.json

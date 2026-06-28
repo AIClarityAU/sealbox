@@ -1,0 +1,67 @@
+{
+  "CLAUDE.md": {
+    "__preamble__": "a3ad67752e6ac1d8c2f7fddfb2f464fb4abe641220e1ba5da3b55cb9b9103087",
+    "Overview": "4dbfa016b0500cbbf31e873f49c01b7f2cfc555b3779e797d144df43d38f9bb1",
+    "Invariants": "e9a4d52f50078f7b84647c4ffe35cf03935cf62f374b53feb3f57b3110418566",
+    "SDD Methodology": "bbb968d7be5aebe45495f7e024f292888ef1aad33610f090212e913fa8c93d28",
+    "File Locations": "85a9d4d6fb654e5f37838f7461288a343cba2bfc7b77c1d65f667e152a03634a",
+    "Commands": "4fb3f0a684d61073870a9995fa6b94f44af11823fd7579de4071a1c9ff9074a6"
+  },
+  "AGENTS.md": {
+    "__preamble__": "065697299dec053ae6571856b09966e9a0edbaa9286ebeb7b35f75510e4d80eb",
+    "For AI Coding Assistants": "ad593f0d7eccb716a94d185245ea1878d6ab46b75ad0e824ac3dfeabd659f2b8",
+    "Specs Directory": "ed4fad97a1d70bc8feff84f7bf97af437032852b769e1f536f8c564a6aa83897",
+    "Decision Records": "fa160edc988d748c232269e7c007fb25758b1eab57d85213a3d908a32c5cf561",
+    "Constitution": "7c071171029bc9f88d6ec108b2c7b06bc9df30f8897bf14424a5f869fea93758",
+    "Task Classification Guide": "0a7ae8bd304b4844cdd81dcd3e36a2a3c8aeee6c382d246f926d462f89b98972",
+    "Rules": "75f6014e495beb70eee624e077daadeb40a026552050e2897e2b82177bc5566e"
+  },
+  ".cursorrules": {
+    "__preamble__": "64198221db08d1ce08230f46ec0ac995c53a62670e32c87595ad7ee5216d8c52",
+    "Project Context": "7a93c6f290bae9471d63c5c9e7d23cf3011146438c4ccfa1ee85cacafa364a2e",
+    "Invariants": "375088428a046ee7461ebf5353175511ebd4b8e97927d8f3aba80bf2fe837a17",
+    "Principles": "8d7fa472a020d997f89d5acec25d68105e6053b434a2c23e75f9bbcda25e7f24",
+    "Before Making Changes": "7b3bdfacb27375a90eb52c71d1de9995e0000fb50da312d1c8b3f17385644bd7",
+    "Coding Standards": "89ab084719acfcbe5296dfb31a2f302c2ef49f8f0e3cdbc528e125244af758fb"
+  },
+  ".minspec/constitution.md": {
+    "__preamble__": "806697c30b185d94f294973d992aa9a7289069a2d7d9811829bff2d71bdeece5",
+    "Invariants": "ccae014a2fe203f201d267fa5e3f8b8c3ee771fe5cc79a36f48a0b812ee0b108",
+    "Principles": "5a3d42f1036a60a70697df0b00c88ba610fc3460d3518182da16907f6c09b1b9",
+    "Constraints": "e8d4f3d58b82597305cd5cc61d828a5f2de20ee674a034942499fcc2e9c80f74",
+    "Goals": "4e83d68bb8a2994239a7f81281669505c09082f5915861d1f7d527204b1b249a"
+  },
+  ".github/workflows/minspec-validate.yml": {
+    "validate-workflow": "6e03bc75f51a6dbd7461e07f51bc16d2f01ffaad19ed33117c43ba3d9ceba624"
+  },
+  ".minspec/hooks/pre-commit": {
+    "pre-commit-hook": "6c22cb0c6212ad07192a9b047491ab9cbc3a1c78123020b5b75a2179d8f594c0"
+  },
+  ".minspec/hooks/commit-msg": {
+    "commit-msg-hook": "0f4a9f7da34dbfbb8dc9945edb1ea5e8528e638e55c45b75492ec65f01bf566f"
+  },
+  ".minspec/hooks/validate.py": {
+    "validate-py": "2d9199b9a789e933b8bde8d062ba8a1af649575cfd244c59dbed8af9c8c9de8c"
+  },
+  ".claude/commands/specify.md": {
+    "slash-claude-specify": "ceb11b583e8e9dd247132374af6f13705a1043cc165a1f3aa862c5f92b1b8c71"
+  },
+  ".claude/commands/clarify.md": {
+    "slash-claude-clarify": "06c4fd869faa3f51d2a81ede2d5096bafb7abecfbbb1c7fad588f4341255d476"
+  },
+  ".claude/commands/plan.md": {
+    "slash-claude-plan": "46570fed11a2a5d66289fe602be7da3a91fb1366f357af322f5611ccff720b42"
+  },
+  ".claude/commands/tasks.md": {
+    "slash-claude-tasks": "bf6c7a77ac8cd9377b580a8d95927dad2117f2f03b60d7d6d391748ac9aa2b8f"
+  },
+  ".claude/commands/analyze.md": {
+    "slash-claude-analyze": "6c317f606f7def2805a6645fe4e3d27e45b373dbf9f42eb340bc5df8de619507"
+  },
+  ".claude/commands/implement.md": {
+    "slash-claude-implement": "d666bf706b847b39a0e8c5739955eef36015ef41eb836c59525d4f8d80376903"
+  },
+  ".cursor/rules/spec-kit-commands.mdc": {
+    "slash-cursor": "0545492ca13f4ed5e4eeb3c2d398dff19497a7d62342a12dca3dc8305e72c5f3"
+  }
+}

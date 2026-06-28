@@ -1,0 +1,45 @@
+{
+  "version": "1",
+  "specsDir": "specs",
+  "decisionsDir": "docs/decisions",
+  "epicsDir": "docs/epics",
+  "specsLayout": "flat",
+  "phaseMappings": {
+    "T1": {
+      "requiredPhases": [
+        "specify"
+      ],
+      "optionalPhases": []
+    },
+    "T2": {
+      "requiredPhases": [
+        "specify",
+        "plan"
+      ],
+      "optionalPhases": [
+        "clarify"
+      ]
+    },
+    "T3": {
+      "requiredPhases": [
+        "specify",
+        "plan",
+        "tasks",
+        "implement"
+      ],
+      "optionalPhases": [
+        "clarify"
+      ]
+    },
+    "T4": {
+      "requiredPhases": [
+        "specify",
+        "clarify",
+        "plan",
+        "tasks",
+        "implement"
+      ],
+      "optionalPhases": []
+    }
+  }
+}

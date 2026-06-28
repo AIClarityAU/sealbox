@@ -37,7 +37,7 @@
       .then(function (r) { return r.json().catch(function () { return { ok: r.ok }; }); })
       .then(function (data) {
         if (data && data.ok) {
-          show("You're on the list — we'll email you when SealBox opens. ✓", "ok");
+          show("You're on the list — we'll email you at launch. ✓", "ok");
           form.reset();
         } else {
           show((data && data.error) || "Something went wrong. Please try again.", "err");
