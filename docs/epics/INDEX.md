@@ -3,5 +3,8 @@
 
 _Bodies of work grouping specs, decisions, and issues. One entry per epic._
 
-_No epics defined yet._
+## [EPIC-007 — SealBox Extension](EPIC-007-sealbox.md)
+
+*Status: active · slug: `sealbox` · order: 6*
+
 <!-- minspec:epic-index:end -->
