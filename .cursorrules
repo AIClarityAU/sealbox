@@ -10,9 +10,7 @@ This project uses MinSpec SDD methodology. Specs in `specs/`, decisions in `docs
 
 ## Principles
 
-- Ceremony proportional to scope (blast radius), not to perceived difficulty
-- User override always wins
-- Specs are living documents
+- DRAFT: Honor CLAUDE.md project instructions — they override default behavior.
 
 ## Before Making Changes
 

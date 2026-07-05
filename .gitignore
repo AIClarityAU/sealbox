@@ -20,3 +20,6 @@ dist/
 # MinSpec ephemeral data
 .minspec/session.json
 .minspec/calibration.json
+
+.minspec/generated-hashes.json
+.minspec/template-baseline.json

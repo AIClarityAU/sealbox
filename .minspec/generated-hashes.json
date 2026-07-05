@@ -14,20 +14,21 @@
     "Decision Records": "20f8d8123316df2b507c6b0cab2910d0ca724caf2c2e310187d8be4a5eae20ca",
     "Constitution": "7d65ab19e0d67761f8dd302bb696c42bf8d7436f7b569ad273db1ee6690839b1",
     "Task Classification Guide": "0a7ae8bd304b4844cdd81dcd3e36a2a3c8aeee6c382d246f926d462f89b98972",
-    "Rules": "75f6014e495beb70eee624e077daadeb40a026552050e2897e2b82177bc5566e"
+    "Rules": "75f6014e495beb70eee624e077daadeb40a026552050e2897e2b82177bc5566e",
+    "Spec Kit Slash Commands": "336ffe2e65dda58fd2c66c03f4eb1067f0974edd18b7ec35afd7d2ab691162fc"
   },
   ".cursorrules": {
     "__preamble__": "db1f45591445a348085532439fe3534401fbf497df8693de0c76533ea6306fc2",
     "Project Context": "c56fd6ffbf458f31f9ac33046835ee6d110d9902fe55678e5b74939276cac59e",
     "Invariants": "2e6ef0a7e5f75a0803d8bfac10d60241fe996ec4a8627b2bf342cde2e8186121",
-    "Principles": "c903bbcc732f0fa9d5eb7885ad8ad231c808a54e6c41097484d941efeda7a6df",
+    "Principles": "d60f1229896f4a1195c79d1402a144349568af954e6abd6ba784637d861b17fd",
     "Before Making Changes": "7b3bdfacb27375a90eb52c71d1de9995e0000fb50da312d1c8b3f17385644bd7",
     "Coding Standards": "89ab084719acfcbe5296dfb31a2f302c2ef49f8f0e3cdbc528e125244af758fb"
   },
   ".minspec/constitution.md": {
     "__preamble__": "138f4e4e939f67dc6c092a21ed1cc5e2b7614e39da11a4940b331874a4781e3e",
     "Invariants": "b24cf758849cedce8269447ce05a923df3530b59a68bd379f4d6f80c7d4b3d74",
-    "Principles": "7a24c9695880015528219df36df8c5263a5df2f0392c5d4451d7f6690babdac5",
+    "Principles": "995cc0498cc3158e01927f19987a2627369a32be5bb875689949c68021c85434",
     "Constraints": "7a870ce7154b580cdb5c7ddc037b9c0dbd28739b77f40732378e73ec09d68ec7",
     "Goals": "633e15d82746c5dad2a30df412cb06344a2457f894c9aecfe52b53623b2583e5"
   }
