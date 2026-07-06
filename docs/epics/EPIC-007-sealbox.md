@@ -36,11 +36,11 @@ quota, never silent PAYG.
 ## Artifacts
 
 - **Decisions:**
-  [DR-008](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-008.md) — unattended dispatch gated on no-credential
+  [DR-008](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-008.md) — unattended dispatch gated on no-credential
   execution isolation (the security precondition).
-  [DR-015](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-015.md) — the agent system ships as a third "Execute"
+  [DR-015](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-015.md) — the agent system ships as a third "Execute"
   extension shared by MinSpec and ScroogeLLM (packaging boundary).
-  [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md) — Layer-2 execution substrate: vsix control
+  [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) — Layer-2 execution substrate: vsix control
   plane + containerised exec plane, host-side model broker defaulting to
   subscription `claude -p`.
 - **Dev-time path (today):** `scripts/` dispatch — `scripts/roles/`,

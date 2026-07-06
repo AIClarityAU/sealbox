@@ -12,21 +12,21 @@ relates_to: [SPEC-016, DR-031]  # SPEC-016 reality-check reviewer ships in this 
 
 # Agent Execute — Layer-2 Execution Substrate (control plane + credential-free exec plane)
 
-> **The Layer-2 substrate of [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md), realising
-> [DR-008](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-008.md)'s no-credential execution isolation in the
-> third "Execute" extension placed by [DR-015](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-015.md).**
+> **The Layer-2 substrate of [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md), realising
+> [DR-008](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-008.md)'s no-credential execution isolation in the
+> third "Execute" extension placed by [DR-015](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-015.md).**
 > Two planes: a credentialed **control plane** (vsix, ext host) drives a credential-free
 > **execution plane** (container). The agent **never** runs in the extension host. Model
 > access is the one narrow seam — a host-side broker the sandbox never authenticates
 > through. Tiering + the Tier-0 air-gap are governed by
-> [DR-004](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-004.md); untrusted issue/spec bodies are **data, not
-> instructions** ([DR-030](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-030.md)); the detect-or-degrade
-> `claude -p` discipline follows [DR-016](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-016.md). **Nothing in
+> [DR-004](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-004.md); untrusted issue/spec bodies are **data, not
+> instructions** ([DR-030](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-030.md)); the detect-or-degrade
+> `claude -p` discipline follows [DR-016](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-016.md). **Nothing in
 > this spec is built** — this is the Specify-phase requirements record; every capability
 > below is *specified, not built*.
 
 **Date:** 2026-06-04
-**Decision:** [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md) (substrate) · isolation [DR-008](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-008.md) · packaging [DR-015](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-015.md) · injection posture [DR-030](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-030.md) · tiering/air-gap [DR-004](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-004.md) · detect-or-degrade [DR-016](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-016.md)
+**Decision:** [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) (substrate) · isolation [DR-008](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-008.md) · packaging [DR-015](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-015.md) · injection posture [DR-030](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-030.md) · tiering/air-gap [DR-004](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-004.md) · detect-or-degrade [DR-016](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-016.md)
 **Epic:** [EPIC-007 Agent Execute Extension](../../../docs/epics/EPIC-007-sealbox.md)
 
 **Tier — T4.** Full ceremony (specify → clarify → plan → tasks → implement). This is the
@@ -41,18 +41,18 @@ not optional.
 
 ## Context
 
-[DR-008](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-008.md) made unattended `claude -p` dispatch conditional
+[DR-008](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-008.md) made unattended `claude -p` dispatch conditional
 on **Layer 2**: the agent must execute inside an isolation boundary with **no host
 credentials**, egress denied by default, and the branch leaving the box as a diff/bundle a
-credentialed host process reviews and pushes. [DR-008](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-008.md)'s
+credentialed host process reviews and pushes. [DR-008](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-008.md)'s
 "unavoidable conclusion" is that a *tool allowlist cannot sandbox a dev agent* — an agent
 that runs the project's own build/test is executing arbitrary code by definition, because
 `package.json` scripts and the test files are code the agent just wrote. The boundary must
 therefore be an **environment**, not a permission list.
 
-[DR-015](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-015.md) placed that work in a **third Tier-1 extension**
+[DR-015](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-015.md) placed that work in a **third Tier-1 extension**
 (`aiclarity.sealbox`) so MinSpec core stays Tier-0 / air-gapped.
-[DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md) settled **how** Layer 2 is physically built and
+[DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) settled **how** Layer 2 is physically built and
 named the category error this spec must not reintroduce: **a vsix cannot be the sandbox** —
 a VS Code extension runs in the extension host, which is the user's own process (same
 `$HOME`, same `gh`/`CLOUDFLARE_API_TOKEN`/FTP/psql/wrangler creds, same `~/.claude`). Run
@@ -75,7 +75,7 @@ fail-closed tier-gate, untrusted-body-as-data framing). It is **dev-tooling that
 seed (`~/code/AgentSystem`, a mmo/333Method DB-queue ops-dispatcher) supplies the
 `claude -p` dispatch + retry/confidence/result-handling logic for the **Layer-1
 manual-dispatch path only** — its DB-queue/systemd architecture is explicitly **not** the
-product architecture; [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md) is.
+product architecture; [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) is.
 
 **Evidence discipline (CLAUDE.md / DR-003).** Nothing here is implemented, done, or shipped.
 Where a requirement traces to a decision it cites the DR by path. Artifact-existence ≠
@@ -93,8 +93,8 @@ evidence any capability exists.
   (an isolated container with a clean env — runs `claude -p`, edits code, runs build/test,
   commits locally, emits a diff + `.agent-summary.md`). The vsix **manages** the substrate
   (spawns/monitors the container); it **never becomes** the sandbox, and the agent **never
-  runs in the extension host**. Traces to [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md)
-  (Decision §two planes) realising [DR-008](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-008.md) Layer 2
+  runs in the extension host**. Traces to [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md)
+  (Decision §two planes) realising [DR-008](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-008.md) Layer 2
   line-for-line.
 
 - **FR-2 (`SandboxRunner` port).** The substrate is consumed through a single
@@ -105,7 +105,7 @@ evidence any capability exists.
   the extension (tier-gating, HITL state, diff handoff, summary→comment) testable with a
   **mock runner**, no docker daemon required — so control-plane/logic tests run anywhere
   (including this docker-less dev container) and only the docker adapter needs a real
-  daemon. Traces to [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md) (Consequences §port;
+  daemon. Traces to [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) (Consequences §port;
   Costly-to-Refactor §port).
 
 ### Model access — host-side broker (sole seam)
@@ -130,14 +130,14 @@ evidence any capability exists.
   egress canary must stay refused), i.e. the R7 convenience-grant regression. Sources the
   server-side fetch cannot reach (private / internal / localhost) are pre-fetched
   **host-side** by the control plane and handed to the agent as FR-15 `<untrusted_…>` DATA.
-  Traces to [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md) (§Model access).
+  Traces to [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) (§Model access).
 
 - **FR-4 (installing Scrooge repoints the broker, never the sandbox).** Whether the broker
   routes direct→Anthropic or via the local ScroogeLLM proxy is a **host-side config flip**;
   the sandbox endpoint is unchanged. The rejected scoped-key-in-sandbox design (which would
   require editing `ANTHROPIC_BASE_URL` *inside* an isolated, egress-denied box) is out of
   scope and must not be reintroduced. Traces to
-  [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md) (§Model access; Alternatives §scoped key).
+  [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) (§Model access; Alternatives §scoped key).
 
 - **FR-5 (billing modes — subscription default, no PAYG; API/Scrooge opt-in).** The default
   billing mode is **subscription** (`claude -p` on the dev's Pro/Max quota): the broker
@@ -154,8 +154,8 @@ evidence any capability exists.
   (#74)** — and the documented fallback (inject the subscription token at spawn; attestation
   must then whitelist exactly that one token) must be resolved in **Clarify** before the
   default-mode plumbing is committed. Traces to
-  [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md) (§Billing mode; OQ lines 111-118), shared
-  product-line subscription-default per [DR-016](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-016.md) Tier-1
+  [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) (§Billing mode; OQ lines 111-118), shared
+  product-line subscription-default per [DR-016](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-016.md) Tier-1
   framing.
 
 ### Boundary verification — control-plane attestation
@@ -186,14 +186,14 @@ evidence any capability exists.
   mis-configured and must fail closed, regardless of any research need. Web research is
   therefore **never** a reason to relax this deny-check.
 
-  Traces to [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md) (§Boundary verification).
+  Traces to [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) (§Boundary verification).
 
 - **FR-7 (positive controls — never infer "secure" from a dead probe).** Each negative
   deny-check is **paired with a positive control**: the *allowlisted* endpoint (broker
   socket / model API) **must succeed**. If both the deny-check and its control fail →
   **broken probe, verdict FAIL**, not a proven boundary (a dead `curl` could mean
   egress-blocked, curl-missing, or canary-down — never assume the safe reading). Traces to
-  [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md) (§Boundary verification, requirement 1).
+  [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) (§Boundary verification, requirement 1).
 
 - **FR-8 (probe suite IS the substrate integration test — two-for-one).** One mechanism
   serves both as the per-dispatch runtime gate (FR-6) **and** as the CI substrate
@@ -203,7 +203,7 @@ evidence any capability exists.
   on the mock `SandboxRunner` (FR-2). **Scope honesty:** attestation proves *"as configured,
   this box cannot reach X"* (a config-correctness gate) — it does **not** prove the absence
   of a kernel/container-escape 0-day; that residual is the microVM/gVisor hardening path
-  (OQ-2, #73). Traces to [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md) (§Two-for-one;
+  (OQ-2, #73). Traces to [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) (§Two-for-one;
   §Scope honesty).
 
 ### Mode split & graceful degrade
@@ -220,20 +220,20 @@ evidence any capability exists.
   seed for manual dispatch (claude -p invocation + retry/confidence/result-parsing) may be
   adapted from `~/code/AgentSystem`'s `dispatcher.js`/`result-handler.js`, **not** its
   DB-queue/systemd architecture. Traces to
-  [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md) (§Graceful degrade) and
-  [DR-008](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-008.md) (Layer 1 / Layer 2).
+  [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) (§Graceful degrade) and
+  [DR-008](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-008.md) (Layer 1 / Layer 2).
 
 - **FR-10 (no container runtime → degrade to Layer-1 manual, NOT "off").** When no usable
   container runtime is detected, the correct degrade is **fall back to Layer-1 manual
   dispatch** (human-initiated, trusted self-authored body, unsandboxed — which
-  [DR-008](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-008.md) already permits), **never** "disabled". "No
+  [DR-008](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-008.md) already permits), **never** "disabled". "No
   docker" downgrades **autonomy**, never the **boundary**: the agent still never runs in the
   ext host. The product reason to install agent-execute is *any code-writing dispatch*, not
-  autonomy alone. Traces to [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md) (§Graceful degrade).
+  autonomy alone. Traces to [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) (§Graceful degrade).
 
 - **FR-11 (mandatory detect-or-degrade; never-throw typed fallbacks).** Container-runtime
   detection **mirrors** the `isGhAvailable()` / `claude` availability probes
-  ([DR-016](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-016.md), [DR-004](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-004.md)
+  ([DR-016](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-016.md), [DR-004](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-004.md)
   Tier-1 rule): probe at activation; absent → degrade gracefully (show an "install a
   container runtime to enable autonomous dispatch" affordance), **never error**. Every
   runtime/probe seam is `catch → log the reason → return a typed, discriminated fallback`
@@ -246,19 +246,19 @@ evidence any capability exists.
   inspectable (auditable-via-UI). The never-throw shell stays **thin**; complex logic lives
   in inner functions that throw normally (real stack traces). This mirrors SPEC-016's
   never-throw/typed-fallback discipline. Traces to
-  [DR-016](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-016.md) (mandatory fallback) and
-  [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md) (§Graceful degrade).
+  [DR-016](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-016.md) (mandatory fallback) and
+  [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) (§Graceful degrade).
 
 ### Tier-gated HITL (the differentiator)
 
 - **FR-12 (consume the shared classifier; tier-gate dispatch).** The control plane consumes
-  the **shared classifier** ([DR-014](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-014.md) — the same engine
+  the **shared classifier** ([DR-014](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-014.md) — the same engine
   the IDE uses) to tier each `agent-ready` issue: **T1–T2 auto-dispatch** (`agent-ready`);
   **T3–T4 → `needs-review`**, blocked pending **human approval** of spec/plan before the
   agent starts. This is the product's stated differentiator — *not "an AI that does
   everything" but an agent that knows when to ask a human* ("agents you can trust because
-  they stop"). Traces to [DR-015](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-015.md) (§three-extension pitch)
-  and [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md) (control-plane responsibilities).
+  they stop"). Traces to [DR-015](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-015.md) (§three-extension pitch)
+  and [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) (control-plane responsibilities).
 
 ### Diff/bundle handoff (no in-sandbox push)
 
@@ -268,8 +268,8 @@ evidence any capability exists.
   `.agent-summary.md`, and performs the `git push` + `gh issue comment` **after** the agent
   process has exited — so the agent never holds the `gh` token. **No in-sandbox push** is a
   permanent contract, not a config; the summary is **data the parent renders**, never
-  instructions. Traces to [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md) (§Diff-handoff) and
-  [DR-008](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-008.md) (Layer 1 parent-side push/comment).
+  instructions. Traces to [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) (§Diff-handoff) and
+  [DR-008](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-008.md) (Layer 1 parent-side push/comment).
 
   - **Base-ref freshness + pinned base (control-plane creation-time precondition).**
     *Complementing FR-13's exit-time handoff:* when the control plane **creates** the agent's
@@ -339,7 +339,7 @@ evidence any capability exists.
   **API mode** additionally carries a **spend cap** on the injected key (trading PAYG dollars
   for headroom past the subscription ceiling). Exact current Anthropic-plan limits must be
   verified before wiring caps. Traces to
-  [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md) (§Usage/quota limits).
+  [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) (§Usage/quota limits).
 
   - **Spend-cap time shape — calendar daily + weekly, NOT a mirror of the 5h/7d subscription
     windows.** The PAYG key is injected **only** as overage spillover (FR-5: subscription-first;
@@ -389,8 +389,8 @@ evidence any capability exists.
   exfiltration, or write** (an integrity risk). **v1 is scoped to trusted self-authored
   issues only**; dispatching **untrusted** (non-self-authored) bodies is gated on the
   microVM/gVisor hardening path (OQ-2, #73). Traces to
-  [DR-030](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-030.md) (data-framing, blast-radius scales with trust)
-  and [DR-008](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-008.md) (untrusted-body delimiters).
+  [DR-030](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-030.md) (data-framing, blast-radius scales with trust)
+  and [DR-008](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-008.md) (untrusted-body delimiters).
 
 ### Tier-0 isolation
 
@@ -400,8 +400,8 @@ evidence any capability exists.
   network/AI module. MinSpec core stays **Tier-0 / air-gapped**; the container dependency is
   confined to the *autonomous* path of this separate Tier-1 extension. A shared **type** (if
   any) may live in `packages/shared` (Tier-0 type only — no invocation, no network); the
-  invocation lives here. Traces to [DR-004](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-004.md) (Tier 0 rule)
-  and [DR-015](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-015.md) (single home, air-gap preserved).
+  invocation lives here. Traces to [DR-004](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-004.md) (Tier 0 rule)
+  and [DR-015](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-015.md) (single home, air-gap preserved).
 
 ## Costly to Refactor
 
@@ -410,34 +410,34 @@ change. Ranked most→least costly. (DR-017 §Costly-to-Refactor: ADR-filter NO,
 in <1 day.)*
 
 1. **The two-plane split (control vsix / execution container)** (FR-1; INV-two-plane;
-   [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md)) — collapsing it back into the extension host
+   [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md)) — collapsing it back into the extension host
    is not a refactor: it re-introduces the category error (a vsix *is* the user's
-   credentialed process) and re-violates every [DR-008](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-008.md)
-   Layer-2 condition, and would unwind [DR-015](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-015.md)'s
+   credentialed process) and re-violates every [DR-008](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-008.md)
+   Layer-2 condition, and would unwind [DR-015](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-015.md)'s
    placement. Effectively un-undoable without re-litigating DR-008/DR-015. *Check: the agent
    process is spawned into the container; no `claude -p` (or equivalent agent invocation)
    executes in the extension host in any code path.*
 2. **The host-side broker as the sole model-access seam** (FR-3, FR-4; INV-broker-seam;
-   [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md)) — because the sandbox endpoint
+   [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md)) — because the sandbox endpoint
    (`ANTHROPIC_BASE_URL` → broker socket) is fixed "for all time", any later move to a
    sandbox-owned credential would require repointing config *inside* an egress-denied box —
    the exact unworkable path the broker exists to avoid; reversing it is a security
    re-architecture. *Check: the sandbox holds no Anthropic credential; its only allowlisted
    egress is the broker socket; Scrooge routing is a host-side flip.*
-3. **The `SandboxRunner` port** (FR-2; [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md)) — *cheap*
+3. **The `SandboxRunner` port** (FR-2; [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md)) — *cheap*
    to swap adapters under it (docker → microVM → cloud are alternate adapters by design — the
    deliberately reversible axis); *expensive* to remove the port itself, since ~95% of the
    extension is written against `spawn→attest→run→collect-diff→teardown`. *Check: the
    spawn→attest→run→collect-diff→teardown interface is fixed before build (contracts-first);
    a mock runner exercises the control plane with no docker.*
 4. **Attestation fails closed + positive controls** (FR-6, FR-7, FR-8;
-   INV-attest-fail-closed; [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md)) — if the gate ever
+   INV-attest-fail-closed; [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md)) — if the gate ever
    defaults open, or infers "secure" from a dead probe, the entire Layer-2 guarantee
    evaporates; retrofitting a fail-closed gate after dispatch is wired is costly. *Check:
    any should-be-denied capability that succeeds aborts dispatch; a deny-check whose positive
    control also fails → verdict FAIL, never "secure".*
 5. **Diff-handoff, no in-sandbox push** (FR-13;
-   [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md)/[DR-008](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-008.md)) —
+   [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md)/[DR-008](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-008.md)) —
    moving push into the sandbox re-adds a push-credential surface the design exists to
    remove. *Check: the only push/comment is parent-side, after the agent exits; the sandbox
    has no push capability.*
@@ -451,27 +451,27 @@ in <1 day.)*
 
 - **INV — Agent never executes in the extension host (T0).** The agent process runs only
   inside the execution-plane container; no code path runs `claude -p` (or an equivalent agent
-  invocation) in the vsix / extension host (FR-1; [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md),
-  [DR-008](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-008.md)).
+  invocation) in the vsix / extension host (FR-1; [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md),
+  [DR-008](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-008.md)).
 - **INV — Sandbox holds no host credentials and no egress except the broker seam (T0).** The
   execution plane gets no `~/.claude`, no `gh`/`CLOUDFLARE_API_TOKEN`/FTP/psql/wrangler
   creds, no `~/.config`/`~/.cache`/keychain, and no network except the single allowlisted
-  broker socket (FR-3, FR-6; [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md),
-  [DR-008](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-008.md)).
+  broker socket (FR-3, FR-6; [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md),
+  [DR-008](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-008.md)).
 - **INV — Attestation fails closed (T0).** Any should-be-denied capability that *succeeds*
   inside the sandbox aborts the dispatch (the agent never runs); a deny-check whose positive
   control also fails yields verdict FAIL, never an inferred "secure" (FR-6, FR-7;
-  [DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md)).
+  [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md)).
 - **INV — Untrusted input is data, never instructions; the agent is credential-free (T0).**
   The issue/spec body is delimited DATA the agent reviews, never obeys; injection at worst
   yields a bad advisory/degraded output, never an action, approval, exfiltration, or write
-  (FR-15; [DR-030](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-030.md),
-  [DR-008](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-008.md)).
+  (FR-15; [DR-030](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-030.md),
+  [DR-008](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-008.md)).
 - **INV — MinSpec Tier-0 core never depends on this extension (T0).** No code path,
   dependency, or contract here makes `packages/minspec` / `packages/shared` depend on
   agent-execute, the container runtime, the broker, or any network/AI module; the air-gap is
-  preserved (FR-16; [DR-004](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-004.md),
-  [DR-015](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-015.md)).
+  preserved (FR-16; [DR-004](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-004.md),
+  [DR-015](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-015.md)).
 - **INV — SealBox obeys rule #8; it never mutates the user's shared checkout (T0).** SealBox
   is a concurrent automated git actor: every dispatched agent (L1 and L2) operates in a
   **dedicated worktree** rooted *outside every checkout*
@@ -593,7 +593,7 @@ manual Layer-1.*
 | R6 | **Degradation gap** — substrate path throws/blocks (or fails *silently* — bare null, no reason) instead of falling back to Layer-1. | Low · High | FR-11 `catch → log reason → typed {ok:false,reason}` over thin never-throw shells; FR-10 Layer-1 manual is the unconditional fallback (not "off"); never-throw-contract T0 test covers every failure path (no-runtime/spawn/attest/timeout). |
 | R7 | **Isolation regression via a "convenience" grant** — a future edit gives the sandbox creds/network/write to "just push" or "auto-fix". | Low · High | The no-cred/no-egress invariants are standing (T0); any grant needs a superseding DR; the attestation gate (FR-6) would *detect* the regression and fail closed; code-review grep for creds/network in the exec path. |
 | R8 | **Prompt injection via untrusted body** steers the agent to a false result. | Med · Med | DATA-framing + injection-aware prompt + credential-free + no-write (FR-15); blast-radius bounded to a degraded advisory (quality/DoS, not integrity); untrusted bodies gated on #73 (R2). Residual: degraded output, not a breach. |
-| R9 | **HITL-gate confusion — dev-time spec-gate ≠ product gate.** The dev-time dispatch harness enforces spec-approval inside a linked worktree by resolving the canonical `.minspec/approvals.json` via `git rev-parse --git-common-dir` ([DR-031](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-031.md), dev-tooling). A future build might try to reuse that mechanism for FR-12's product HITL. | Low · Med | **It does not transfer — record, do not adopt.** FR-12's HITL is the tier-gate + shared classifier + human spec/plan approval, **not** the dev PreToolUse hook. At Layer-2 the `git-common-dir` trick is moot anyway: FR-6 requires the host `$HOME`/checkout **unmounted**, so no canonical main tree exists inside the box to resolve against. DR-031 is the build-time analogue only (`relates_to`, not `depends_on`). |
+| R9 | **HITL-gate confusion — dev-time spec-gate ≠ product gate.** The dev-time dispatch harness enforces spec-approval inside a linked worktree by resolving the canonical `.minspec/approvals.json` via `git rev-parse --git-common-dir` ([DR-031](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-031.md), dev-tooling). A future build might try to reuse that mechanism for FR-12's product HITL. | Low · Med | **It does not transfer — record, do not adopt.** FR-12's HITL is the tier-gate + shared classifier + human spec/plan approval, **not** the dev PreToolUse hook. At Layer-2 the `git-common-dir` trick is moot anyway: FR-6 requires the host `$HOME`/checkout **unmounted**, so no canonical main tree exists inside the box to resolve against. DR-031 is the build-time analogue only (`relates_to`, not `depends_on`). |
 | R10 | **Concurrent git mutation corrupts a run or the user's tree.** While a run is in flight the human merges PRs (`origin/main` advances), edits `main` directly, and sibling sessions work in other worktrees on the same `.git`. A 7-lens adversarial audit ([DR-046](../../../docs/decisions/DR-046.md)) confirmed all paths integrity-class: stale-base **factually-wrong output** + mis-stated diff range at exit; a **stale-based / non-ff push**; and (L1, no fs isolation) the agent running in / pushing from the **user's primary checkout** → moved shared HEAD + stranded work (the rule-#8 corruption, SealBox as culprit). | Med · High | The rule-#8 worktree-isolation INV + the symmetric base-freshness INV (creation pin + exit reconcile) + create/ff-only-no-force push + `git -C <worktree>` with pre/post primary-checkout verify + defined L1 teardown & git-state orphan GC (FR-13 creation/exit sub-bullets; FR-11 typed reasons; [DR-046](../../../docs/decisions/DR-046.md)). Residual: a kernel/escape 0-day is out of scope (R2); this closes the *git-concurrency* class only. |
 
 ## Out of scope
@@ -601,7 +601,7 @@ manual Layer-1.*
 - **microVM/gVisor hardening + untrusted (non-self-authored) issue dispatch** — the kernel
   boundary and the threat model it unlocks (OQ-2, #73). v1 is trusted self-authored issues
   only.
-- **Remote/cloud sandbox substrate** — deferred ([DR-017](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-017.md)
+- **Remote/cloud sandbox substrate** — deferred ([DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md)
   Alternatives): reintroduces network + a credential-handoff surface + per-run cost.
 - **The reality-check reviewer / round-table feature** — SPEC-016 (the Tier-1 review
   amplifier that ships in this same extension and *consumes* the broker seam this spec
@@ -609,38 +609,38 @@ manual Layer-1.*
 - **ScroogeLLM proxy internals** — the broker *routes* to it (FR-4); how Scrooge
   routes/caches/measures is the ScroogeLLM repo's concern (private; DR-027).
 - **The `scripts/` dev-time dispatch harness** — remains dev-tooling for building this
-  monorepo ([DR-015](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-015.md)); it is not the product surface and
+  monorepo ([DR-015](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-015.md)); it is not the product surface and
   ships in no `.vsix`.
 - **The AgentSystem DB-queue / systemd architecture** — `~/code/AgentSystem` is a seed for
   the Layer-1 dispatch/retry/confidence logic only; its `tel.agent_tasks` queue + systemd
   timer model is **not** the product architecture.
 - **Public brand name + marketplace positioning** — deferred pending marketing/SEO scan
-  ([DR-015](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-015.md)); "AgentSystem" is a working name only,
+  ([DR-015](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-015.md)); "AgentSystem" is a working name only,
   `aiclarity.sealbox` a working technical id only (OQ-4).
 
 ## Open questions
 
-- **OQ-1 — subscription-oauth broker-injectability ([#74](https://github.com/harvest316/minspec/issues/74)).**
+- **OQ-1 — subscription-oauth broker-injectability ([#74](https://github.com/AIClarityAU/minspec/issues/74)).**
   Can the claude CLI's subscription oauth be broker-injected (sandbox sends sans-credential,
   broker adds the token), or does subscription auth bind the token to where the CLI runs
   (and/or does ToS/endpoint-pinning forbid pointing subscription `claude -p` at a proxy)?
   **API-key mode is definitely injectable; subscription mode is the unknown.** Gates the
   default billing-mode plumbing (FR-5). **Must resolve in Clarify**, before committing the
   default. Documented fallback recorded in FR-5 / R1.
-- **OQ-2 — microVM/gVisor hardening before untrusted dispatch ([#73](https://github.com/harvest316/minspec/issues/73)).**
+- **OQ-2 — microVM/gVisor hardening before untrusted dispatch ([#73](https://github.com/AIClarityAU/minspec/issues/73)).**
   Namespace isolation is not kernel isolation; the kernel-level boundary (Firecracker /
   gVisor) is the hardening path required **before** non-self-authored issue bodies are
   dispatched unattended. v1 is scoped to **trusted self-authored issues only** (FR-15, R2);
   do not resolve here — record.
 - **OQ-3 — where the product code lives (packaging). RESOLVED (2026-06-04, session decision).**
-  New `packages/agent-execute` in this monorepo, per [DR-015](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-015.md)
+  New `packages/agent-execute` in this monorepo, per [DR-015](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-015.md)
   — beside `packages/minspec`, sharing `@aiclarity/shared`, shipped in the Pro pack. The existing
   `~/code/AgentSystem` (the old 333Method/mmo DB-queue ops fix-dispatcher) is a
   **learn-functionality-only seed** for the Layer-1 dispatch/retry/confidence logic; its
   DB-queue/systemd architecture is **not** adopted (Out of scope). "Reuse" = *adapt logic*, not
   *adopt structure*.
-- **OQ-4 — public brand name + domain ([#66](https://github.com/harvest316/minspec/issues/66)).**
-  Still deferred per [DR-015](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-015.md) pending marketing/SEO +
+- **OQ-4 — public brand name + domain ([#66](https://github.com/AIClarityAU/minspec/issues/66)).**
+  Still deferred per [DR-015](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-015.md) pending marketing/SEO +
   competitive scan (tracked in #66); working name "AgentSystem", working technical id
   `aiclarity.sealbox`. Do not treat either as the product name on any public surface.
 
@@ -698,8 +698,8 @@ manual path.
   block v1 manual.
 - **Exact verdict Zod fields + severity/evidence (CL-5)** → Plan phase (contracts-first, CDD).
   **Non-binding reference for Plan:** the dev-time `/loop` review-signals renderer
-  (`scripts/render-review-signals.mjs`, [#180](https://github.com/harvest316/minspec/issues/180)
-  / [DR-033](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-033.md) — monorepo dev-tooling, ships in no `.vsix`,
+  (`scripts/render-review-signals.mjs`, [#180](https://github.com/AIClarityAU/minspec/issues/180)
+  / [DR-033](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-033.md) — monorepo dev-tooling, ships in no `.vsix`,
   **not** the agent-execute product surface) shows one shape for *proven, not self-reported*
   evidence fields: a named `regressionTest` gated behind separate `regressionProvenBaseRed` /
   `regressionProvenHeadGreen` proof flags, with **NO FALSE GREEN** (an unproven regression
