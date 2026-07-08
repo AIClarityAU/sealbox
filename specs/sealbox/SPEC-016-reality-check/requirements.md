@@ -12,17 +12,17 @@ relates_to: [SPEC-013, SPEC-010, SPEC-011]
 
 # MinSpec — Reality-Check Reviewer + Round-Table (Slices 2-3)
 
-> **Slices 2-3 of [DR-029](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-029.md) (§8).** The **Tier-1**
+> **Slices 2-3 of [DR-029](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-029.md) (§8).** The **Tier-1**
 > amplifier over SPEC-013's deterministic floor: an independent adversarial
 > second-reviewer (Slice 2) and an opt-in multi-lens round-table (Slice 3). Ships in
-> the **agent-execute** extension ([DR-015](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-015.md)) —
+> the **agent-execute** extension ([DR-015](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-015.md)) —
 > **never** in `packages/minspec` / `packages/shared` (Invariant #1). The core
 > consumes a verdict JSON only; absent → degrade to the SPEC-013 floor. Untrusted
-> input handled per [DR-030](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-030.md). Makes **no skim claim**
-> (gated on the study, [#127](https://github.com/harvest316/minspec/issues/127)).
+> input handled per [DR-030](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-030.md). Makes **no skim claim**
+> (gated on the study, [#127](https://github.com/AIClarityAU/minspec/issues/127)).
 
 **Date:** 2026-06-03
-**Decision:** [DR-029](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-029.md) §5 · isolation [DR-030](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-030.md) · tiering [DR-004](https://github.com/harvest316/minspec/blob/main/docs/decisions/DR-004.md) · reuses the [SPEC-011](https://github.com/harvest316/minspec/blob/main/specs/minspec/SPEC-011-epic-backfill/requirements.md) `claude -p` pattern.
+**Decision:** [DR-029](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-029.md) §5 · isolation [DR-030](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-030.md) · tiering [DR-004](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-004.md) · reuses the [SPEC-011](https://github.com/AIClarityAU/minspec/blob/main/specs/minspec/SPEC-011-epic-backfill/requirements.md) `claude -p` pattern.
 **Epic:** [EPIC-007 Agent Execute Extension](../../../docs/epics/EPIC-007-sealbox.md)
 
 ---
@@ -59,7 +59,7 @@ into the doc (LLM authoring is the spec-author flow, DR-029).
   unhandled-unacknowledged edge case; under-stated blast-radius vs the real import
   graph (codegraph, the one factual anchor → least hallucination-prone).
 - **FR-4 (two-lens default at T3).** Default = two decorrelated lenses
-  ("find the bug" + "defend the spec", roles per [#129](https://github.com/harvest316/minspec/issues/129)),
+  ("find the bug" + "defend the spec", roles per [#129](https://github.com/AIClarityAU/minspec/issues/129)),
   to blunt same-model collusion (~2× the cheap-check cost, accepted). Single-lens
   permitted at lower opt-in tiers.
 - **FR-5 (advisory verdict → B1/B2, never block, never auto-write).** The verdict is
