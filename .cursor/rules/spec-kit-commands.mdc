@@ -16,7 +16,7 @@ Run the **Specify** phase of MinSpec SDD methodology.
 
 Read the active spec referenced in the `minspec:active-spec` block of `CLAUDE.md` / `AGENTS.md`. Open the corresponding file under the project `specs/` directory and fill in the Specify section: user-visible outcome, problem statement, constraints.
 
-Set valid frontmatter so the SPECS pane and the approve gate read it correctly: `status:` must be one of `new`, `specifying`, `implementing`, `done`, `archived` (an absent or unrecognized value is silently coerced to "new" and flagged at approve), and set an explicit `tier:` (one of `T1`, `T2`, `T3`, `T4`) — a missing tier is flagged too. Getting these right here is the point: the approve gate is only a backstop, not the place to discover gaps.
+Set valid frontmatter so the SPECS pane and the approve gate read it correctly: `status:` must be one of `new`, `specifying`, `implementing`, `done`, `archived`, `superseded` (an absent or unrecognized value is silently coerced to "new" and flagged at approve), and set an explicit `tier:` (one of `T1`, `T2`, `T3`, `T4`) — a missing tier is flagged too. Getting these right here is the point: the approve gate is only a backstop, not the place to discover gaps.
 
 Match ceremony to the spec's tier:
 - T1: one sentence

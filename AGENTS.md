@@ -20,7 +20,6 @@ Architecture decisions are documented in `docs/decisions/`. Check existing decis
 
 Project invariants, principles, and constraints are in `.minspec/constitution.md`. These rules must never be violated.
 
-
 ## Task Classification Guide
 
 Before starting work, classify the task by its **mechanical scope** (blast radius), not by how hard it is to think through:

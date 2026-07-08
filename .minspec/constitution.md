@@ -12,12 +12,9 @@ Rules that must never be violated. All changes must preserve them.
 
 Guidelines that should be followed. Can be bent in exceptional circumstances with justification.
 
-<!-- Add principles here. Example: -->
-<!-- 1. Ceremony proportional to scope (blast radius), not perceived difficulty -->
-<!-- 2. User override always wins -->
-<!-- 3. Specs are living documents, not bureaucracy -->
-- DRAFT: Honor CLAUDE.md project instructions — they override default behavior.
-  > _proposed because a CLAUDE.md instructions file is present_
+1. DRAFT: Honor CLAUDE.md project instructions — they override default behavior.
+- DRAFT: Record hard-to-reverse decisions as decision records before implementing.
+  > _proposed because a docs/decisions/ register is in use_
 
 ## Constraints
 
