@@ -32,7 +32,7 @@
     "Goals": "4e83d68bb8a2994239a7f81281669505c09082f5915861d1f7d527204b1b249a"
   },
   ".github/workflows/minspec-validate.yml": {
-    "validate-workflow": "6e03bc75f51a6dbd7461e07f51bc16d2f01ffaad19ed33117c43ba3d9ceba624"
+    "validate-workflow": "8f5fd49c11fabac02d606fa5a494d893d9a64e1e19e1930e3a6250b2571112bd"
   },
   ".minspec/hooks/pre-commit": {
     "pre-commit-hook": "6c22cb0c6212ad07192a9b047491ab9cbc3a1c78123020b5b75a2179d8f594c0"
@@ -44,7 +44,7 @@
     "validate-py": "2d9199b9a789e933b8bde8d062ba8a1af649575cfd244c59dbed8af9c8c9de8c"
   },
   ".claude/commands/specify.md": {
-    "slash-claude-specify": "ceb11b583e8e9dd247132374af6f13705a1043cc165a1f3aa862c5f92b1b8c71"
+    "slash-claude-specify": "0cdd8be0c9e045bba3de5dc2674797556caa9882e34b45af84e30039e9f34c4a"
   },
   ".claude/commands/clarify.md": {
     "slash-claude-clarify": "06c4fd869faa3f51d2a81ede2d5096bafb7abecfbbb1c7fad588f4341255d476"
@@ -62,6 +62,6 @@
     "slash-claude-implement": "d666bf706b847b39a0e8c5739955eef36015ef41eb836c59525d4f8d80376903"
   },
   ".cursor/rules/spec-kit-commands.mdc": {
-    "slash-cursor": "0545492ca13f4ed5e4eeb3c2d398dff19497a7d62342a12dca3dc8305e72c5f3"
+    "slash-cursor": "cb02be832a6029b61efcd97e620558c4e2a42ff530ebb957c235ffc6b470b520"
   }
 }
