@@ -32,7 +32,7 @@
     "Goals": "4e83d68bb8a2994239a7f81281669505c09082f5915861d1f7d527204b1b249a"
   },
   ".github/workflows/minspec-validate.yml": {
-    "validate-workflow": "8f5fd49c11fabac02d606fa5a494d893d9a64e1e19e1930e3a6250b2571112bd"
+    "validate-workflow": "093b71873765d3ee711ebca80e9890bb4d475b610649e1663e461d1a73666a75"
   },
   ".minspec/hooks/pre-commit": {
     "pre-commit-hook": "6c22cb0c6212ad07192a9b047491ab9cbc3a1c78123020b5b75a2179d8f594c0"

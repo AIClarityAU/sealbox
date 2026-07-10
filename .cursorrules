@@ -11,6 +11,7 @@ This project uses MinSpec SDD methodology. Specs in `specs/`, decisions in `docs
 ## Principles
 
 - DRAFT: Honor CLAUDE.md project instructions — they override default behavior.
+- DRAFT: Record hard-to-reverse decisions as decision records before implementing.
 
 ## Before Making Changes
 

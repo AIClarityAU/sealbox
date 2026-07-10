@@ -13,8 +13,7 @@ Rules that must never be violated. All changes must preserve them.
 Guidelines that should be followed. Can be bent in exceptional circumstances with justification.
 
 1. DRAFT: Honor CLAUDE.md project instructions — they override default behavior.
-- DRAFT: Record hard-to-reverse decisions as decision records before implementing.
-  > _proposed because a docs/decisions/ register is in use_
+2. DRAFT: Record hard-to-reverse decisions as decision records before implementing.
 
 ## Constraints
 
