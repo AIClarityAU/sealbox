@@ -37,6 +37,21 @@ The classifier sees scope, not difficulty. A subtle one-line fix and a trivial o
 2. User override always wins — if the human says "just do it," do it. The predicted tier only ratchets up, never auto-down.
 3. Ceremony must be proportional to scope — don't over-engineer small-scope tasks.
 
+## Spec Kit Slash Commands
+
+Generic agents can invoke the following commands. Each routes to a MinSpec SDD phase against the active spec.
+
+| Command | Phase | Purpose |
+|---|---|---|
+| `/specify` | Specify | Start or update the Specify phase for the active MinSpec spec |
+| `/clarify` | Clarify | Resolve open questions before planning |
+| `/plan` | Plan | Draft the technical approach for the active spec |
+| `/tasks` | Tasks | Break the plan into ordered, checkable tasks |
+| `/analyze` | Analyze | Cross-check spec, plan, and tasks for consistency |
+| `/implement` | Implement | Execute the task list against the active spec |
+
+Full per-command instructions live in `.claude/commands/*.md` (Claude Code) and `.cursor/rules/spec-kit-commands.mdc` (Cursor) when those tools are detected.
+
 <!-- minspec:slash-commands:start -->
 
 ## Spec Kit Slash Commands
