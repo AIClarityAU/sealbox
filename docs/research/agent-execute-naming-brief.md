@@ -6,7 +6,7 @@
 > CLI: VS Code marketplace **0 matches**, scoped npm **`@aiclarity/sealbox` free** (publish
 > scoped — bare npm `sealbox` is a niche encryption lib by "gooncity", Dec 2025). **STILL
 > OWED: USPTO/EUIPO trademark knockout** (the security-adjacent bare-npm name raises this).
-> Cascade pending: DR-015 + SPEC-019 `agent-execute`→`sealbox` id refs, #66 resolution, CF
+> Cascade pending: DR-015 + SPEC-002 `agent-execute`→`sealbox` id refs, #66 resolution, CF
 > Pages site. The shortlist/analysis below is retained as the rationale of record.
 >
 > *History: produced by the #66 workflow (`wf_8f93b5e7-238`); Scan+Generate completed, the
