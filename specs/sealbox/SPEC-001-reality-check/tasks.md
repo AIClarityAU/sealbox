@@ -1,12 +1,12 @@
 ---
-id: SPEC-016
+id: SPEC-001
 type: tasks
 status: specifying
 product: sealbox
 epic: EPIC-007  # Agent Execute Extension
 ---
 
-# SPEC-016 — Task Breakdown
+# SPEC-001 — Task Breakdown
 
 <!-- MinSpec scaffolded this tasks.md (#225). Break the plan into ordered,
      checkable tasks. Ticking a checkbox here is body-only — it never voids

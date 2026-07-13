@@ -6,7 +6,7 @@
 > model call, and it **can't push without your review**.
 
 **Status: pre-launch.** Waitlist site live at **[sealbox.dev](https://sealbox.dev)**. The
-extension itself is not built — its requirements were harvested as `SPEC-019` (execution
+extension itself is not built — its requirements were harvested as `SPEC-002` (execution
 substrate) in the MinSpec monorepo and are being migrated here (split out of
 `AIClarityAU/minspec` per the decision that created this repo; mirrors the ScroogeLLM split,
 DR-027). Publisher: **Audit&Fix** · marketplace publisher id `aiclarity` · ext id (planned)

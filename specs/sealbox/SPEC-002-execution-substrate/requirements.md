@@ -1,13 +1,13 @@
 ---
-id: SPEC-019
+id: SPEC-002
 type: requirements
-# 🔒 Once approved, hash-locked: approved bytes recorded in .minspec/approvals.json[SPEC-019].specHash. ANY edit voids approval (hash → stale) — re-run "MinSpec: Approve Spec". DR-012.
+# 🔒 Once approved, hash-locked: approved bytes recorded in .minspec/approvals.json[SPEC-002].specHash. ANY edit voids approval (hash → stale) — re-run "MinSpec: Approve Spec". DR-012.
 status: specifying
 tier: T4
 product: sealbox
 epic: EPIC-007  # Agent Execute Extension
 depends_on: [DR-008, DR-015, DR-017, DR-030, DR-004, DR-016]  # DR-008 no-cred isolation (Layer-2 precondition); DR-015 third-extension packaging; DR-017 the substrate spec (two-plane / SandboxRunner / broker / attestation); DR-030 untrusted-input-as-data; DR-004 tiering + Tier-0 air-gap; DR-016 detect-or-degrade claude -p pattern
-relates_to: [SPEC-016, DR-031]  # SPEC-016 reality-check reviewer ships in this same extension + consumes the broker seam; DR-031 = the dev-time spec-gate, build-time analogue of FR-12 HITL — does NOT transfer to the product (R9)
+relates_to: [SPEC-001, DR-031]  # SPEC-001 reality-check reviewer ships in this same extension + consumes the broker seam; DR-031 = the dev-time spec-gate, build-time analogue of FR-12 HITL — does NOT transfer to the product (R9)
 ---
 
 # Agent Execute — Layer-2 Execution Substrate (control plane + credential-free exec plane)
@@ -244,7 +244,7 @@ evidence any capability exists.
   **not** a bare `null` and **never** a silent black hole — expected degradation
   (no runtime) must be distinguishable from a bug, and the swallowed reason logged +
   inspectable (auditable-via-UI). The never-throw shell stays **thin**; complex logic lives
-  in inner functions that throw normally (real stack traces). This mirrors SPEC-016's
+  in inner functions that throw normally (real stack traces). This mirrors SPEC-001's
   never-throw/typed-fallback discipline. Traces to
   [DR-016](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-016.md) (mandatory fallback) and
   [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md) (§Graceful degrade).
@@ -603,7 +603,7 @@ manual Layer-1.*
   only.
 - **Remote/cloud sandbox substrate** — deferred ([DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md)
   Alternatives): reintroduces network + a credential-handoff surface + per-run cost.
-- **The reality-check reviewer / round-table feature** — SPEC-016 (the Tier-1 review
+- **The reality-check reviewer / round-table feature** — SPEC-001 (the Tier-1 review
   amplifier that ships in this same extension and *consumes* the broker seam this spec
   defines); its verdict contract + lenses are its own scope.
 - **ScroogeLLM proxy internals** — the broker *routes* to it (FR-4); how Scrooge

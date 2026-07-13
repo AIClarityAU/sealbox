@@ -1,7 +1,7 @@
 ---
-id: SPEC-016
+id: SPEC-001
 type: requirements
-# 🔒 Once approved, hash-locked: approved bytes recorded in .minspec/approvals.json[SPEC-016].specHash. ANY edit voids approval (hash → stale) — re-run "MinSpec: Approve Spec". DR-012.
+# 🔒 Once approved, hash-locked: approved bytes recorded in .minspec/approvals.json[SPEC-001].specHash. ANY edit voids approval (hash → stale) — re-run "MinSpec: Approve Spec". DR-012.
 status: specifying
 tier: T3
 product: sealbox
