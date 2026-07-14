@@ -3,7 +3,7 @@ description: Break the plan into ordered, checkable tasks
 ---
 
 <!-- >>> minspec:managed:slash-claude-tasks >>> -->
-# /tasks — MinSpec Tasks Phase
+# /minspec-tasks — MinSpec Tasks Phase
 
 Run the **Tasks** phase. Required for T3+.
 

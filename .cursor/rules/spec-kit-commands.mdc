@@ -8,7 +8,7 @@ alwaysApply: false
 
 When the user invokes one of the following commands, follow MinSpec's SDD phase methodology. The active spec is referenced in the `minspec:active-spec` block of `CLAUDE.md` or `.cursorrules`.
 
-## /specify
+## /minspec-specify
 
 *Start or update the Specify phase for the active MinSpec spec*
 
@@ -29,7 +29,7 @@ Also in Zone A, after Requirements, add a **`## Acceptance Criteria`** section t
 
 Never violate invariants in `CLAUDE.md` or `.minspec/constitution.md`. Arguments: $ARGUMENTS
 
-## /clarify
+## /minspec-clarify
 
 *Resolve open questions before planning*
 
@@ -39,7 +39,7 @@ List concrete answerable questions blocking the plan. For each question add an a
 
 Update the active spec's Clarify section. Arguments: $ARGUMENTS
 
-## /plan
+## /minspec-plan
 
 *Draft the technical approach for the active spec*
 
@@ -57,7 +57,7 @@ These are DESIGN-phase deliverables; in split-layout specs they live in `design.
 
 Honour the dependency budget recorded in `CLAUDE.md` (0-1 for simple, 2-3 for complex). Update the Plan section of the active spec. Arguments: $ARGUMENTS
 
-## /tasks
+## /minspec-tasks
 
 *Break the plan into ordered, checkable tasks*
 
@@ -67,7 +67,7 @@ Break the plan into small, dependency-ordered checkboxes. Each task must be comp
 
 MinSpec tracks progress from these checkboxes — they must remain in standard markdown checkbox format (`- [ ]` / `- [x]`). Arguments: $ARGUMENTS
 
-## /analyze
+## /minspec-analyze
 
 *Cross-check spec, plan, and tasks for consistency*
 
@@ -81,7 +81,7 @@ MinSpec's native phase list ends at `implement`; treat Analyze as a review pass 
 
 Output gaps and contradictions. Do not modify code. Arguments: $ARGUMENTS
 
-## /implement
+## /minspec-implement
 
 *Execute the task list against the active spec*
 

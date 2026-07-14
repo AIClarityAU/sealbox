@@ -3,7 +3,7 @@ description: Start or update the Specify phase for the active MinSpec spec
 ---
 
 <!-- >>> minspec:managed:slash-claude-specify >>> -->
-# /specify — MinSpec Specify Phase
+# /minspec-specify — MinSpec Specify Phase
 
 Run the **Specify** phase of MinSpec SDD methodology.
 

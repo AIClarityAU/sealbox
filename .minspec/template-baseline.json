@@ -2,7 +2,7 @@
   "CLAUDE.md": {
     "__preamble__": "a3ad67752e6ac1d8c2f7fddfb2f464fb4abe641220e1ba5da3b55cb9b9103087",
     "Overview": "4dbfa016b0500cbbf31e873f49c01b7f2cfc555b3779e797d144df43d38f9bb1",
-    "Invariants": "e9a4d52f50078f7b84647c4ffe35cf03935cf62f374b53feb3f57b3110418566",
+    "Invariants": "f25e1f2987a708e1275b995bef59593eda37667c7b567284dc162df512cd1c88",
     "SDD Methodology": "bbb968d7be5aebe45495f7e024f292888ef1aad33610f090212e913fa8c93d28",
     "File Locations": "85a9d4d6fb654e5f37838f7461288a343cba2bfc7b77c1d65f667e152a03634a",
     "Commands": "4fb3f0a684d61073870a9995fa6b94f44af11823fd7579de4071a1c9ff9074a6"
@@ -12,14 +12,14 @@
     "For AI Coding Assistants": "ad593f0d7eccb716a94d185245ea1878d6ab46b75ad0e824ac3dfeabd659f2b8",
     "Specs Directory": "ed4fad97a1d70bc8feff84f7bf97af437032852b769e1f536f8c564a6aa83897",
     "Decision Records": "fa160edc988d748c232269e7c007fb25758b1eab57d85213a3d908a32c5cf561",
-    "Constitution": "7c071171029bc9f88d6ec108b2c7b06bc9df30f8897bf14424a5f869fea93758",
+    "Constitution": "65d339ee0890939acd69a1919615117c4d77ef80d3d54caf3caf6188a2811d04",
     "Task Classification Guide": "0a7ae8bd304b4844cdd81dcd3e36a2a3c8aeee6c382d246f926d462f89b98972",
     "Rules": "75f6014e495beb70eee624e077daadeb40a026552050e2897e2b82177bc5566e"
   },
   ".cursorrules": {
     "__preamble__": "64198221db08d1ce08230f46ec0ac995c53a62670e32c87595ad7ee5216d8c52",
     "Project Context": "7a93c6f290bae9471d63c5c9e7d23cf3011146438c4ccfa1ee85cacafa364a2e",
-    "Invariants": "375088428a046ee7461ebf5353175511ebd4b8e97927d8f3aba80bf2fe837a17",
+    "Invariants": "bea263cb8009418b731f7e47e08c68922cdbb6ed3776964a1567b97e8921aae8",
     "Principles": "8d7fa472a020d997f89d5acec25d68105e6053b434a2c23e75f9bbcda25e7f24",
     "Before Making Changes": "7b3bdfacb27375a90eb52c71d1de9995e0000fb50da312d1c8b3f17385644bd7",
     "Coding Standards": "89ab084719acfcbe5296dfb31a2f302c2ef49f8f0e3cdbc528e125244af758fb"
@@ -43,25 +43,55 @@
   ".minspec/hooks/validate.py": {
     "validate-py": "2d9199b9a789e933b8bde8d062ba8a1af649575cfd244c59dbed8af9c8c9de8c"
   },
-  ".claude/commands/specify.md": {
-    "slash-claude-specify": "0cdd8be0c9e045bba3de5dc2674797556caa9882e34b45af84e30039e9f34c4a"
+  ".github/workflows/ai-review.yml": {
+    "ai-review-workflow": "a52c602696ed94aac5e931d9bdacf1e28053a6e9213bf7421854108cea2748ba"
   },
-  ".claude/commands/clarify.md": {
-    "slash-claude-clarify": "06c4fd869faa3f51d2a81ede2d5096bafb7abecfbbb1c7fad588f4341255d476"
+  ".github/workflows/ready-to-merge.yml": {
+    "ready-to-merge-workflow": "e0254fcd20fde306869612fbe0f20ac823822bbb9550c5bce859999d7029a65d"
   },
-  ".claude/commands/plan.md": {
-    "slash-claude-plan": "46570fed11a2a5d66289fe602be7da3a91fb1366f357af322f5611ccff720b42"
+  ".github/workflows/ai-review-retry.yml": {
+    "ai-review-retry-workflow": "80af64756917bcf9682b64c34b9cc03171a645c5a6c95b935535a488a3089c14"
   },
-  ".claude/commands/tasks.md": {
-    "slash-claude-tasks": "bf6c7a77ac8cd9377b580a8d95927dad2117f2f03b60d7d6d391748ac9aa2b8f"
+  "scripts/review-branch.sh": {
+    "review-branch-script": "dff0544791b38f66b8e2837b0ac4dce98b8b39ecd1ed17200cbb38689c0910b0"
   },
-  ".claude/commands/analyze.md": {
-    "slash-claude-analyze": "6c317f606f7def2805a6645fe4e3d27e45b373dbf9f42eb340bc5df8de619507"
+  "scripts/review-decide.sh": {
+    "review-decide-script": "04c66b9d6af660750df2f603d42223f9b5276776982ba7dcf83643a222c13ab8"
   },
-  ".claude/commands/implement.md": {
-    "slash-claude-implement": "d666bf706b847b39a0e8c5739955eef36015ef41eb836c59525d4f8d80376903"
+  "scripts/roles/reviewer.md": {
+    "review-role-reviewer": "68cf55f49f40f804e042d909605ba1384623434c6ecb1a56523ef77ed72baec8"
+  },
+  "scripts/roles/security.md": {
+    "review-role-security": "383990eaeda63fca7a7dba9343cb01b43a14c25a0da3af47e632bf37192e5c0c"
+  },
+  "scripts/roles/architect.md": {
+    "review-role-architect": "199722f5bded0bd4c03b6eb41c209a387531f8e73f8d2b6c9fe1e5eeca7e2242"
+  },
+  "scripts/roles/skeptic.md": {
+    "review-role-skeptic": "c3f141f7fd7380864763a8b5fb82c7c873f6c175fc8131c1272fd00a08f0374b"
+  },
+  ".github/scripts/ai-review-guard.js": {
+    "ai-review-guard": "8cefc8f6102c907583ee0a7dd624f7d7d8c2c18debc0f2c4fcb1092235003db0"
+  },
+  ".claude/commands/minspec-specify.md": {
+    "slash-claude-specify": "68f62d397d9151e6b89a3b2dcbfea2a39beedc196dca51deeea080f514d66729"
+  },
+  ".claude/commands/minspec-clarify.md": {
+    "slash-claude-clarify": "0d1f5a3e7c0d6dafab530a7d9de8463eec1ef21b874a4b44ff8ad6bd40743d29"
+  },
+  ".claude/commands/minspec-plan.md": {
+    "slash-claude-plan": "b72e95dbb675797851ed8e42ee2587d4d47183717fb04fdb1d4142d2e116ae4e"
+  },
+  ".claude/commands/minspec-tasks.md": {
+    "slash-claude-tasks": "123feaa955094a707f54d82219a531a9ae1a4d53e647f538391e939d7ee30a37"
+  },
+  ".claude/commands/minspec-analyze.md": {
+    "slash-claude-analyze": "4629f73d2673283a91abbc3b6d6ac84caa1603c2eacf81f111c1f338fb108463"
+  },
+  ".claude/commands/minspec-implement.md": {
+    "slash-claude-implement": "bbebff835866c7a947876fa317541d1b882779d61470cc8be1c7c4e2ed6b24f3"
   },
   ".cursor/rules/spec-kit-commands.mdc": {
-    "slash-cursor": "cb02be832a6029b61efcd97e620558c4e2a42ff530ebb957c235ffc6b470b520"
+    "slash-cursor": "fc91a3b1bd0cacc71a20e155c84faae237669eba6078a625bebdfc35cdc909f9"
   }
 }
