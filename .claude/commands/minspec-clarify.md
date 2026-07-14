@@ -3,7 +3,7 @@ description: Resolve open questions before planning
 ---
 
 <!-- >>> minspec:managed:slash-claude-clarify >>> -->
-# /clarify — MinSpec Clarify Phase
+# /minspec-clarify — MinSpec Clarify Phase
 
 Run the **Clarify** phase. Required for T4, optional for T2/T3, skipped for T1.
 

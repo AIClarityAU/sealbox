@@ -3,7 +3,7 @@ description: Draft the technical approach for the active spec
 ---
 
 <!-- >>> minspec:managed:slash-claude-plan >>> -->
-# /plan — MinSpec Plan Phase
+# /minspec-plan — MinSpec Plan Phase
 
 Run the **Plan** phase. Required for T2+.
 

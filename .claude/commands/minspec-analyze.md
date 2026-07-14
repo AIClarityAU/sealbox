@@ -3,7 +3,7 @@ description: Cross-check spec, plan, and tasks for consistency
 ---
 
 <!-- >>> minspec:managed:slash-claude-analyze >>> -->
-# /analyze — MinSpec Analyze Phase
+# /minspec-analyze — MinSpec Analyze Phase
 
 Run the **Analyze** phase — cross-artifact consistency review before implementation.
 

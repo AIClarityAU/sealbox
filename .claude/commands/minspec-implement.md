@@ -3,7 +3,7 @@ description: Execute the task list against the active spec
 ---
 
 <!-- >>> minspec:managed:slash-claude-implement >>> -->
-# /implement — MinSpec Implement Phase
+# /minspec-implement — MinSpec Implement Phase
 
 Run the **Implement** phase. Required for T3+.
 
