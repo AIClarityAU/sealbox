@@ -1,0 +1,674 @@
+# >>> minspec:managed:ai-review-workflow >>>
+# ai-review — independent AI reviewer in CI, posting AS THE APP (#342 Track B, #428)
+#
+# Runs the credential-free independent reviewer over a PR's diff and posts the
+# verdict + applies the `ai-review:pass` / `ai-review:changes` label AS THE
+# `minspec-sdd[bot]` GitHub App — giving the label bot-PROVENANCE, the root that
+# makes auto-merge-on-`ai-review:pass` safe (#428). This is the "dedicated
+# reviewer identity" the ready-to-merge.yml header calls out as the missing piece:
+# until now the label was applied by a human account, so its provenance could only
+# be enforced at account granularity. Applied by the App from THIS run only (no
+# human in the loop), it becomes a real provenance root.
+#
+# ── REUSED, NOT REWRITTEN (on main) ──────────────────────────────────────────
+#   • scripts/review-branch.sh <base> <head> [--role reviewer|security]
+#       Runs `claude -p --allowedTools "Read,Glob,Grep" --model opus` over
+#       `git diff base...head` framed as <untrusted_diff>; prints the raw agent
+#       output (a REVIEW_VERDICT_BEGIN…END block) to stdout. The agent holds NO
+#       gh/git/network/Bash — it can only return TEXT. Empty diff / agent crash →
+#       no verdict (the gate then fails closed).
+#   • scripts/review-decide.sh  (stdin→stdout, pure, fail-closed)
+#       Emits exactly one label: `ai-review:pass` or `ai-review:changes`. Missing/
+#       garbled/>1-block/non-"pass"/ESCALATE → `ai-review:changes` (never a false
+#       green).
+#
+# ── SECURITY MODEL (T0 invariants) ───────────────────────────────────────────
+#   • TRUSTED CONTROL PLANE FROM BASE (the load-bearing one). We check out the
+#     PR's BASE ref, so every executed reviewer SCRIPT — scripts/review-branch.sh,
+#     scripts/review-decide.sh, scripts/roles/* — is the BASE (trusted) version.
+#     A same-repo PR author (write access → secrets present) therefore cannot
+#     rewrite review-decide.sh to `echo ai-review:pass` and forge a pass THAT WAY.
+#     SCOPE (no overclaim): this base-trust covers the reviewer SCRIPTS/ROLES, NOT
+#     this workflow file — `on: pull_request` still runs ai-review.yml from the PR
+#     HEAD, and a PR could edit the gate itself (this .yml, or a scripts/* file it
+#     will run in a later base run) to forge a pass. That residual is closed by the
+#     SELF-EDIT GUARD below, NOT by the base checkout. The untrusted head is fetched
+#     for the `git diff base...head` ONLY — its file CONTENTS are seen solely as
+#     diff DATA, never checked out into the workspace and never executed.
+#   • SELF-EDIT GUARD (fail closed). Because ai-review.yml runs from head, the
+#     reviewer cannot self-certify a PR that rewrites the reviewer. So if the PR's
+#     changed-file set touches `.github/` OR `scripts/` — or cannot be computed at
+#     all — the verdict is FORCED to `ai-review:changes` regardless of the agent's
+#     output, and the run posts a "machinery touched → human review required"
+#     notice. Auto-pass is therefore impossible on a self-editing PR. Fail closed:
+#     an errored/empty changed-file computation is treated AS a self-edit
+#     (→ changes), never as clean.
+#   • `pull_request` (NOT `pull_request_target`): the latter would run untrusted
+#     PR code WITH secrets — a well-known exfil hole. Our PRs are same-repo
+#     branches, so secrets are available under plain `pull_request`. A FORK PR
+#     gets EMPTY secrets → the guard step below skips cleanly (no red, no leak).
+#   • Credential separation. The review agent (`claude -p` inside
+#     review-branch.sh) authenticates for INFERENCE via CLAUDE_CODE_OAUTH_TOKEN,
+#     but runs with `--allowedTools "Read,Glob,Grep"` so it has NO tool that can
+#     use a credential (no gh, git, network, or Bash). The GitHub App token lives
+#     ONLY in the stale-clear / post / fail-closed steps (the credentialed parent)
+#     and is NEVER present in the review step — so the agent cannot post, label, or
+#     merge. The untrusted diff stays DATA (review-branch.sh does the framing);
+#     this workflow never interpolates PR title/body/diff into a shell (only
+#     base/head SHAs and the PR number, passed via env).
+#   • Output redaction (token exfil). The review step carries
+#     CLAUDE_CODE_OAUTH_TOKEN for inference; a prompt-injected diff could coax the
+#     no-tools reviewer to echo `/proc/self/environ`. Before the verdict text ever
+#     reaches the PR comment we scrub the token value AND any `sk-ant-*` secret to
+#     `***`, so a leaked token can never land in the bot-posted comment. (The App
+#     token is not in this step at all.)
+#   • Supply chain. The Claude CLI is pinned to an exact published version and
+#     every marketplace action to a full commit SHA — a backdoored `latest`/`@vN`
+#     cannot run with the token in env.
+#   • TOCTOU. `cancel-in-progress` can leave a superseded `ai-review:pass` (from an
+#     earlier commit) on the PR while this run re-reviews the new head. At run
+#     start we clear any stale pass and mark the PR `ai-review:pending`, so it
+#     cannot feed auto-merge mid-run. The COMPLETE fix — ready-to-merge verifying
+#     the pass was applied to the CURRENT head SHA — is a follow-up in
+#     ready-to-merge.yml (deliberately NOT edited from here).
+#   • Fail closed everywhere: any error, missing verdict, a security-role (any
+#     code change) that requests changes, or a PR that edits the review machinery
+#     (`.github/`/`scripts/`) → `ai-review:changes`. A spurious `pass` is the worst
+#     outcome (it feeds auto-merge), so `pass` is emitted ONLY on an unambiguous
+#     clean verdict from every required role AND only when the PR does not touch
+#     the machinery.
+#   • RESIDUALS (known, LOW; tracked with #458). (a) redact() scrubs the literal
+#     token value and `sk-ant-*`; an agent that re-encodes the token before echoing
+#     it (base64/hex/split) could slip past the literal scrub — but the no-tools
+#     agent cannot read the token in the first place, so this is defence-in-depth,
+#     not the primary control. (b) The stale-pass clear at run start is best-effort
+#     (`|| true`); the post step writes the authoritative label, and the COMPLETE
+#     TOCTOU fix (ready-to-merge verifying the pass SHA == head) is a follow-up in
+#     ready-to-merge.yml.
+#
+# ── ACTIVATION (deps flagged in the PR body) ─────────────────────────────────
+#   1. Add the `CLAUDE_CODE_OAUTH_TOKEN` repo secret (`claude setup-token`) — a
+#      genuine-CLI subscription OAuth token, per DR-052 (NOT the Agent SDK, NOT a
+#      broker). Until it exists, this workflow SKIPS with a notice (never reds).
+#   2. Confirm `MINSPEC_APP_PRIVATE_KEY` is the RAW PEM (create-github-app-token
+#      needs raw, not base64), and the App is installed on the repo with
+#      `pull-requests: write` + `issues: write` (labels/comments use the issues
+#      API) + `checks: write` (the honest `ai-review` verdict check-run). If
+#      `checks: write` is absent the review still works — the verdict check is
+#      simply not posted (best-effort), never a false green.
+#   3. AFTER a verified run: set repo variable `AI_REVIEW_BOT_LOGINS =
+#      minspec-sdd[bot]` (so ready-to-merge.yml trusts ONLY the bot) and add the
+#      `ai-review` verdict check as a REQUIRED check in the branch ruleset
+#      (#480 — 3-way conclusion makes this safe to leave always-on: machinery
+#      PRs self-exempt via `neutral`, a genuine pass is `success`, and anything
+#      else is `failure` and actually blocks — the runner's own
+#      `ai-review-runner` job is not the signal). Deliberately NOT done here
+#      (ruleset config is a human/HITL action, not this workflow's).
+
+# NOTE — why this workflow is `ai-review-runner`, not `ai-review`:
+# GitHub Actions posts one implicit check-run per JOB, named after the job, whose
+# conclusion is just "did the job exit 0". If the job were named `ai-review`, that
+# implicit check would go GREEN whenever the reviewer merely RAN — even when the
+# verdict is `ai-review:changes` — so a human reading `ai-review: success` would
+# wrongly think the PR passed. So the runner job is named `ai-review-runner` (its
+# implicit check honestly means "the review ran"), and the name `ai-review` is
+# reserved for the EXPLICIT verdict check-run posted at the end of the job, whose
+# conclusion MIRRORS THE VERDICT — 3-way as of #480: a machinery PR (touches
+# `.github/`/`scripts/`) → `neutral` (self-exempt, a gate can't certify itself),
+# `ai-review:pass` → `success`, anything else → `failure`. Green on `ai-review`
+# therefore means the PR actually passed, never just "it ran"; `failure` is what
+# lets this be a real, always-on REQUIRED merge gate.
+name: ai-review-runner
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# Least privilege for the workflow's OWN token: it only needs to read code to
+# check out. All PR posting/labelling uses the App token (steps.app-token), never
+# this GITHUB_TOKEN — that is what gives the label its bot provenance.
+permissions:
+  contents: read
+
+# One review in flight per PR; a new push supersedes the previous run.
+concurrency:
+  group: ai-review-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # Renamed from `ai-review` → `runner` so its implicit "did the job exit 0"
+  # check-run is NOT called `ai-review` (see the NOTE at the top of this file).
+  # The authoritative `ai-review` check is posted explicitly by the final step,
+  # with a conclusion that mirrors the verdict.
+  runner:
+    runs-on: ubuntu-latest
+    steps:
+      # Secrets can't be read inside `if:`, so copy them into a step env and set an
+      # output. Empty (unset secret, or a fork PR) → skip the rest with a NOTICE,
+      # never a failure. Keeps this workflow safe to merge before the credentials
+      # exist and safe against fork PRs.
+      - name: Check reviewer is configured (skip cleanly if not)
+        id: guard
+        env:
+          OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          APP_ID: ${{ secrets.MINSPEC_APP_ID }}
+          APP_KEY: ${{ secrets.MINSPEC_APP_PRIVATE_KEY }}
+        run: |
+          set -eu
+          if [ -z "${OAUTH_TOKEN}" ] || [ -z "${APP_ID}" ] || [ -z "${APP_KEY}" ]; then
+            echo "::notice title=AI reviewer not configured::Add the CLAUDE_CODE_OAUTH_TOKEN and MINSPEC_APP_ID / MINSPEC_APP_PRIVATE_KEY repo secrets to activate the independent AI reviewer. Skipping — this is NOT a failure."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Mint the App installation token → the actor for every post/label below is
+      # `minspec-sdd[bot]`. Needs the RAW PEM in MINSPEC_APP_PRIVATE_KEY.
+      - name: Mint GitHub App token (post as minspec-sdd[bot])
+        id: app-token
+        if: steps.guard.outputs.configured == 'true'
+        uses: actions/create-github-app-token@f2acddfb5195534d487896a656232b016a682f3c # v1.9.0
+        with:
+          app-id: ${{ secrets.MINSPEC_APP_ID }}
+          private-key: ${{ secrets.MINSPEC_APP_PRIVATE_KEY }}
+
+      # TOCTOU guard (partial). `cancel-in-progress` means a superseded
+      # `ai-review:pass` from an earlier commit can linger while this run re-reviews
+      # the NEW head — long enough for auto-merge to fire on unreviewed code. Clear
+      # any stale pass and mark the PR `ai-review:pending` for the duration of this
+      # run, AS THE BOT (App token). Best-effort (`|| true`): removing the stale
+      # pass is load-bearing, but a transient label-API hiccup here must not red the
+      # run — the final post step below writes the authoritative label anyway. The
+      # COMPLETE fix (ready-to-merge verifying the pass label's commit SHA == head)
+      # is a follow-up in ready-to-merge.yml, NOT edited here.
+      - name: Clear stale pass at run start (mark pending) as minspec-sdd[bot]
+        if: steps.guard.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+
+          # Self-heal ALL label objects this workflow can apply, on a fresh repo
+          # that has never run it before (`gh pr edit --add-label` 404s if the
+          # label object doesn't exist yet — a repo's labels aren't git content,
+          # so copying this workflow into a new repo does NOT bring them along).
+          # `ai-review:blocked` was already created defensively further down (only
+          # on the blocked path); `pending`/`pass`/`changes` were NOT, so a fresh
+          # repo's "Post verdict" step 404s on its load-bearing add-label call —
+          # found porting this workflow into scroogellm (2026-07-09). Create all
+          # four here, earliest point in the job, so nothing downstream can hit it.
+          gh label create "ai-review:pending" --repo "$REPO" --color fbca04 \
+            --description "AI review in progress" 2>/dev/null || true
+          gh label create "ai-review:pass" --repo "$REPO" --color 0e8a16 \
+            --description "Independent AI reviewer greenlit (advisory; human still approves)" 2>/dev/null || true
+          gh label create "ai-review:changes" --repo "$REPO" --color d93f0b \
+            --description "AI reviewer requested changes — loops back to dev" 2>/dev/null || true
+          gh label create "ai-review:blocked" --repo "$REPO" --color d4c5f9 \
+            --description "AI review could not run (quota/transient) — retry-able, not a code verdict" 2>/dev/null || true
+
+          gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "ai-review:pass" 2>/dev/null || true
+          gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "ai-review:pending" 2>/dev/null || true
+
+      # Check out the TRUSTED BASE ref (NOT the PR head). This makes the executed
+      # control plane — scripts/review-branch.sh, scripts/review-decide.sh,
+      # scripts/roles/* — the BASE versions, so a same-repo PR cannot rewrite the
+      # gate to forge a pass. fetch-depth: 0 gives full history (so the merge-base
+      # for `base...head` is present); the untrusted head is fetched in the review
+      # step for the DIFF ONLY (data), never checked out or executed.
+      - name: Checkout TRUSTED base (control scripts come from base, never head)
+        if: steps.guard.outputs.configured == 'true'
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Set up Node 22
+        if: steps.guard.outputs.configured == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      # Genuine Claude Code CLI so `claude -p` (inside review-branch.sh) is on PATH.
+      # DR-052: the real CLI direct to Anthropic — NOT the Agent SDK, NOT a broker.
+      # Pinned to an exact published version (supply-chain): a backdoored `latest`
+      # must not run in the step that holds the inference token.
+      - name: Install Claude Code CLI
+        if: steps.guard.outputs.configured == 'true'
+        run: npm install -g @anthropic-ai/claude-code@2.1.201
+
+      # Reviewer (always) + security (any non-docs code change). Each role's
+      # output is decided by the fail-closed gate; the combined verdict passes ONLY
+      # if every required role passed. CLAUDE_CODE_OAUTH_TOKEN is the INFERENCE
+      # credential for `claude -p` here — the agent still has no actionable tool.
+      # The App token is intentionally ABSENT from this step.
+      - name: Independent review → decide combined label
+        id: review
+        if: steps.guard.outputs.configured == 'true'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          AI_REVIEW_COVERAGE: ${{ vars.AI_REVIEW_COVERAGE }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -uo pipefail
+
+          BASE="$PR_BASE_SHA"
+          HEAD="$PR_HEAD_SHA"
+
+          # ── review coverage (repo-level; CI has no per-dev machine — the per-dev
+          #    slider in #453 is the LOCAL review-pr.sh path). 'single' = reviewer
+          #    only (legacy); 'panel' = + architect + skeptic voters (security stays
+          #    code-only). Default 'panel'; set repo variable AI_REVIEW_COVERAGE=single
+          #    to dial back to one voter. Unknown value → panel (fail toward coverage).
+          COVERAGE="${AI_REVIEW_COVERAGE:-panel}"
+          case "$COVERAGE" in single|panel) ;; *) COVERAGE=panel ;; esac
+
+          # The workspace is the TRUSTED base checkout (fetch-depth: 0). Fetch the
+          # UNTRUSTED head SHA so `git diff base...head` has both endpoints — the
+          # head is brought in as DIFF DATA ONLY; it is never checked out and no
+          # script from it is executed. The SHA is passed via env (never raw
+          # interpolation). If the fetch fails, the diff is empty → fail closed.
+          git fetch --no-tags --quiet origin "$HEAD" 2>/dev/null || true
+
+          extract_block() { sed -n '/REVIEW_VERDICT_BEGIN/,/REVIEW_VERDICT_END/p'; }
+
+          # Scrub any inference-token value or `sk-ant-*` secret to `***` before the
+          # reviewer text can reach the PR comment. Defeats a prompt-injected diff
+          # that coaxes the no-tools reviewer into echoing /proc/self/environ.
+          # awk index() does a LITERAL (regex-free) match of the exact token value,
+          # so it is robust regardless of characters in the token.
+          redact() {
+            sed -E 's/sk-ant-[A-Za-z0-9_-]+/***/g' \
+              | if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+                  awk -v tok="$CLAUDE_CODE_OAUTH_TOKEN" \
+                    '{ while ((p=index($0,tok))>0) $0=substr($0,1,p-1) "***" substr($0,p+length(tok)); print }'
+                else
+                  cat
+                fi
+          }
+
+          # ── self-edit fail-closed: does this PR touch the review machinery? ──
+          # `on: pull_request` runs THIS workflow (and would run any scripts/* it
+          # calls in a later BASE run) from a head the PR author controls. The base
+          # checkout makes the reviewer SCRIPTS trusted, but NOT edits to them, so a
+          # PR that rewrites `.github/` or `scripts/` could forge a pass. We compute
+          # the changed-file set ONCE here (reused by the security role below) with
+          # EXPLICIT error detection: if `git diff` fails OR the set is empty we
+          # cannot prove the PR is clean, so we FAIL CLOSED and treat it as a
+          # self-edit — never as clean. Any match of `^\.github/` or `^scripts/`
+          # forces the final verdict to changes (an OVERRIDE applied at combine
+          # time, not a skip — the reviewer still runs below, for information).
+          CHANGED=""
+          CHANGED_OK=no
+          if CHANGED="$(git diff --name-only "$BASE...$HEAD" 2>/dev/null)" && [ -n "$CHANGED" ]; then
+            CHANGED_OK=yes
+          fi
+
+          SELF_EDIT=no
+          SELF_EDIT_KIND=""
+          if [ "$CHANGED_OK" != "yes" ]; then
+            SELF_EDIT=yes
+            SELF_EDIT_KIND=indeterminate
+          elif printf '%s\n' "$CHANGED" | grep -qE '^(\.github/|scripts/)'; then
+            SELF_EDIT=yes
+            SELF_EDIT_KIND=machinery
+          fi
+
+          # ── reviewer role (always) ──
+          REVIEWER_OUT="$(bash scripts/review-branch.sh "$BASE" "$HEAD" --role reviewer || true)"
+          REVIEWER_LABEL="$(printf '%s\n' "$REVIEWER_OUT" | bash scripts/review-decide.sh || true)"
+          REVIEWER_BLOCK="$(printf '%s\n' "$REVIEWER_OUT" | extract_block | redact)"
+          [ -z "$REVIEWER_BLOCK" ] && REVIEWER_BLOCK="(reviewer emitted no verdict block — fail-closed to changes)"
+
+          # ── security role (runs on ANY code change; skipped only for docs-only PRs) ──
+          # Agnostic — NO hardcoded monorepo path. Security flaws live in any executable
+          # surface (sites/*.js, scripts/, .github/, config, packages/, …), not just
+          # `packages/`, and the security lens has the SAME scope as the reviewer over
+          # code. A PR is security-exempt ONLY when every changed file is Markdown (pure
+          # docs/approvables). Durable per-project code-surface detection (init scans the
+          # file list, dev confirms) is #453 / SPEC-033 D-4; this is the agnostic interim.
+          SECURITY_REQUIRED=no
+          SECURITY_LABEL=""
+          SECURITY_BLOCK=""
+          if [ "$CHANGED_OK" = "yes" ] && printf '%s\n' "$CHANGED" | grep -qvE '\.md$'; then
+            SECURITY_REQUIRED=yes
+            SECURITY_OUT="$(bash scripts/review-branch.sh "$BASE" "$HEAD" --role security || true)"
+            SECURITY_LABEL="$(printf '%s\n' "$SECURITY_OUT" | bash scripts/review-decide.sh || true)"
+            SECURITY_BLOCK="$(printf '%s\n' "$SECURITY_OUT" | extract_block | redact)"
+            [ -z "$SECURITY_BLOCK" ] && SECURITY_BLOCK="(security reviewer emitted no verdict block — fail-closed to changes)"
+          fi
+
+          # ── architect role (panel coverage only) — design-fit / scope / contracts /
+          #    missing-DR lens. Always-on in panel: design review applies to specs AND
+          #    code, so it is NOT gated on the code-vs-docs split the security role uses.
+          ARCHITECT_REQUIRED=no
+          ARCHITECT_LABEL=""
+          ARCHITECT_BLOCK=""
+          if [ "$COVERAGE" = "panel" ]; then
+            ARCHITECT_REQUIRED=yes
+            ARCHITECT_OUT="$(bash scripts/review-branch.sh "$BASE" "$HEAD" --role architect || true)"
+            ARCHITECT_LABEL="$(printf '%s\n' "$ARCHITECT_OUT" | bash scripts/review-decide.sh || true)"
+            ARCHITECT_BLOCK="$(printf '%s\n' "$ARCHITECT_OUT" | extract_block | redact)"
+            [ -z "$ARCHITECT_BLOCK" ] && ARCHITECT_BLOCK="(architect emitted no verdict block — fail-closed to changes)"
+          fi
+
+          # ── skeptic role (panel coverage only) — evidence discipline: unproven
+          #    done/fixed/implemented claims, false status fields, hollow tests. ──
+          SKEPTIC_REQUIRED=no
+          SKEPTIC_LABEL=""
+          SKEPTIC_BLOCK=""
+          if [ "$COVERAGE" = "panel" ]; then
+            SKEPTIC_REQUIRED=yes
+            SKEPTIC_OUT="$(bash scripts/review-branch.sh "$BASE" "$HEAD" --role skeptic || true)"
+            SKEPTIC_LABEL="$(printf '%s\n' "$SKEPTIC_OUT" | bash scripts/review-decide.sh || true)"
+            SKEPTIC_BLOCK="$(printf '%s\n' "$SKEPTIC_OUT" | extract_block | redact)"
+            [ -z "$SKEPTIC_BLOCK" ] && SKEPTIC_BLOCK="(skeptic emitted no verdict block — fail-closed to changes)"
+          fi
+
+          # ── combine (N-voter panel): pass ONLY if EVERY required voter passed.
+          #    Precedence is changes > blocked > pass: a real `changes` from ANY voter
+          #    that RAN wins (never masked by a sibling that was quota-`blocked`); a
+          #    `blocked` (review could not RUN — quota/rate-limit/transient) surfaces
+          #    only when nothing requested changes, i.e. the sole reason we cannot pass
+          #    is an INCOMPLETE review → retry-able via `ai-review-retry`. `blocked` must
+          #    never read as `changes` (that would tell the dev "the reviewer wants
+          #    changes" and hide the real, fixable cause). reviewer is always required;
+          #    security when code changed; architect + skeptic under `panel` coverage.
+          #    Each REQUIRED voter contributes a "req:label" pair; unrequired voters
+          #    (req=no) are skipped. Empty/garbled label → the `*)` arm → changes
+          #    (fail closed). (Machinery PRs are forced to changes by the self-edit
+          #    override below regardless, so a blocked voter there yields to it.) ──
+          FINAL="ai-review:pass"
+          ANY_BLOCKED=no
+          for pair in \
+              "yes:${REVIEWER_LABEL}" \
+              "${SECURITY_REQUIRED}:${SECURITY_LABEL}" \
+              "${ARCHITECT_REQUIRED}:${ARCHITECT_LABEL}" \
+              "${SKEPTIC_REQUIRED}:${SKEPTIC_LABEL}"; do
+            req="${pair%%:*}"
+            lbl="${pair#*:}"
+            [ "$req" = "yes" ] || continue
+            case "$lbl" in
+              ai-review:pass) ;;
+              ai-review:blocked) ANY_BLOCKED=yes ;;
+              *) FINAL="ai-review:changes" ;;
+            esac
+          done
+          if [ "$FINAL" = "ai-review:pass" ] && [ "$ANY_BLOCKED" = "yes" ]; then
+            FINAL="ai-review:blocked"
+          fi
+
+          # ── self-edit OVERRIDE (fail closed): a PR touching the review machinery
+          #    (`.github/`/`scripts/`), or one whose changed set could not be
+          #    determined, can NEVER auto-pass — no matter what the roles decided.
+          #    Applied AFTER the combine so the reviewer still ran for information
+          #    but cannot yield a green on a PR that edits its own gate. ──
+          if [ "$SELF_EDIT" = "yes" ]; then
+            FINAL="ai-review:changes"
+          fi
+
+          echo "label=$FINAL" >> "$GITHUB_OUTPUT"
+
+          # ── is_machinery output (#480) — reused by the check-run step below to
+          #    self-exempt (neutral) an always-on REQUIRED `ai-review` check.
+          #    ONLY the unambiguous "changed paths match .github/|scripts/" case
+          #    counts, NOT the "indeterminate" (diff-computation-failed) case:
+          #    that one must stay fail-closed (failure), or a PR could win the
+          #    neutral exemption simply by making the changed-file diff error.
+          IS_MACHINERY=false
+          [ "$SELF_EDIT_KIND" = "machinery" ] && IS_MACHINERY=true
+          echo "is_machinery=$IS_MACHINERY" >> "$GITHUB_OUTPUT"
+
+          echo "Coverage=$COVERAGE | Reviewer=${REVIEWER_LABEL:-<none>} | Security(${SECURITY_REQUIRED})=${SECURITY_LABEL:-<n/a>} | Architect(${ARCHITECT_REQUIRED})=${ARCHITECT_LABEL:-<n/a>} | Skeptic(${SKEPTIC_REQUIRED})=${SKEPTIC_LABEL:-<n/a>} | SelfEdit=${SELF_EDIT}(${SELF_EDIT_KIND:-none}) | FINAL=$FINAL | IsMachinery=$IS_MACHINERY"
+
+          # ── build the PR comment body (findings/rationale behind the label) ──
+          BODY="$RUNNER_TEMP/ai-review-comment.md"
+          {
+            echo "## 🤖 AI review — \`$FINAL\`"
+            echo
+            if [ "$FINAL" = "ai-review:blocked" ]; then
+              # The reviewer could not RUN — a transient/quota outage, NOT a verdict
+              # on the code. Give the dev the plain-language cause + concrete options
+              # so a mid-week quota exhaustion never reads as a mysterious "changes".
+              echo "> ⏳ **The AI reviewer could not run — this is NOT a review of your code.**"
+              echo ">"
+              echo "> Almost always the **Claude subscription session quota** is exhausted (also possible: rate-limit / overload). The required \`ai-review\` check is \`action_required\` — it blocks merge only because un-reviewed code must not land — and it **re-runs automatically** when the quota window resets (the \`ai-review-retry\` workflow)."
+              echo ">"
+              echo "> **Options:**"
+              echo "> 1. **Wait** for the quota window to reset — the retry workflow re-reviews automatically."
+              echo "> 2. **Fail over to PAYG API** — set repo variable \`AI_REVIEW_FAILOVER=payg\` + secret \`ANTHROPIC_API_KEY\`; re-runs then use pay-as-you-go instead of the subscription quota."
+              echo "> 3. Re-run the \`ai-review\` workflow manually once quota is back."
+              det=$(printf '%s\n' "$REVIEWER_OUT" | sed -n '/REVIEW_UNAVAILABLE_BEGIN/,/REVIEW_UNAVAILABLE_END/p' | redact)
+              if [ -n "$det" ]; then
+                echo
+                echo "<details><summary>reviewer output (redacted — may include the reset time)</summary>"
+                echo
+                echo '```'
+                printf '%s\n' "$det"
+                echo '```'
+                echo "</details>"
+              fi
+              echo
+              echo "_Posted by \`minspec-sdd[bot]\`. Transient/quota failures are surfaced as \`ai-review:blocked\` (distinct from \`ai-review:changes\`) so a token outage never masquerades as a code-review verdict._"
+            else
+              if [ "$SELF_EDIT" = "yes" ]; then
+                if [ "$SELF_EDIT_KIND" = "machinery" ]; then
+                  echo "> ⚠️ **This PR modifies the AI-review machinery (\`.github/\`/\`scripts/\`) — auto-pass is disabled; a human must review.**"
+                else
+                  echo "> ⚠️ **The set of changed files could not be verified — auto-pass is disabled (fail closed); a human must review.**"
+                fi
+                echo ">"
+                echo "> \`on: pull_request\` runs this workflow from the PR head, so a change to the gate itself cannot self-certify. The verdict is forced to \`ai-review:changes\` regardless of the reviewer's output below (which still runs, for information)."
+                echo
+              fi
+              echo "### Reviewer"
+              echo '```'
+              printf '%s\n' "$REVIEWER_BLOCK"
+              echo '```'
+              if [ "$SECURITY_REQUIRED" = "yes" ]; then
+                echo
+                echo "### Security (code changed)"
+                echo '```'
+                printf '%s\n' "$SECURITY_BLOCK"
+                echo '```'
+              fi
+              if [ "$ARCHITECT_REQUIRED" = "yes" ]; then
+                echo
+                echo "### Architect (design / scope)"
+                echo '```'
+                printf '%s\n' "$ARCHITECT_BLOCK"
+                echo '```'
+              fi
+              if [ "$SKEPTIC_REQUIRED" = "yes" ]; then
+                echo
+                echo "### Skeptic (evidence discipline)"
+                echo '```'
+                printf '%s\n' "$SKEPTIC_BLOCK"
+                echo '```'
+              fi
+              echo
+              echo "_Independent fresh-context reviewers (\`scripts/review-branch.sh\`, no-tools agents reading the diff as untrusted data); each label decided by the deterministic fail-closed gate (\`scripts/review-decide.sh\`). Posted by \`minspec-sdd[bot]\` from CI — provenance is the App identity, verified here, not the label alone (#428, #342). Panel coverage (\`AI_REVIEW_COVERAGE\`): the combined verdict fails toward \`changes\` if ANY voter requests changes._"
+            fi
+          } > "$BODY"
+          echo "body-file=$BODY" >> "$GITHUB_OUTPUT"
+
+      # Post + label AS THE BOT. GH_TOKEN = App token (this is the ONLY step, with
+      # the fail-closed one, that holds it). No CLAUDE_CODE_OAUTH_TOKEN here.
+      - name: Post verdict + apply label as minspec-sdd[bot]
+        if: steps.guard.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          LABEL: ${{ steps.review.outputs.label }}
+          BODY_FILE: ${{ steps.review.outputs.body-file }}
+          # Human-reviewer fallback for the fail-closed (`ai-review:changes`) path
+          # below. Comma-separated logins from the repo variable if set, else the
+          # repo owner. Passed via env (never `github.event.pull_request.*`).
+          REVIEWERS: ${{ vars.AI_REVIEW_HUMAN_REVIEWERS }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+
+          # Normalise: `ai-review:pass` and `ai-review:blocked` (reviewer could not
+          # run — quota/transient) are the only non-changes states; anything else
+          # fails closed to `ai-review:changes` (never a spurious pass).
+          case "$LABEL" in
+            ai-review:pass|ai-review:blocked) ;;
+            *) LABEL="ai-review:changes" ;;
+          esac
+
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$BODY_FILE"
+
+          if [ "$LABEL" = "ai-review:blocked" ]; then
+            gh label create "ai-review:blocked" --repo "$REPO" --color d4c5f9 \
+              --description "AI review could not run (quota/transient) — retry-able, not a code verdict" 2>/dev/null || true
+          fi
+
+          # Apply the decided label FIRST (load-bearing), then clear the other two
+          # verdict labels + the in-progress marker (tolerate their absence).
+          gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "$LABEL"
+          for other in ai-review:pass ai-review:changes ai-review:blocked; do
+            [ "$other" = "$LABEL" ] && continue
+            gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "$other" 2>/dev/null || true
+          done
+          gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "ai-review:pending" 2>/dev/null || true
+
+          # Fail-closed → pull a human in — ONLY for a real `ai-review:changes`
+          # (normal request-changes OR the self-edit override). A `blocked` verdict
+          # is retry-able (the reviewer never ran), NOT a human-review situation, so
+          # it must NOT summon a reviewer or the needs-human-review label — the
+          # ai-review-retry workflow re-runs it when quota returns. All best-effort
+          # (`|| true`): the label above is the authoritative signal.
+          if [ "$LABEL" = "ai-review:changes" ]; then
+            REVIEWERS="${REVIEWERS:-$OWNER}"
+            gh label create "needs-human-review" --repo "$REPO" \
+              --color FBCA04 --description "AI review failed closed — a human must resolve" 2>/dev/null || true
+            gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "needs-human-review" 2>/dev/null || true
+            gh pr edit "$PR_NUMBER" --repo "$REPO" --add-reviewer "$REVIEWERS" 2>/dev/null || true
+          fi
+
+      # Backstop: if ANY step above errored (install, mint, review, post…), request
+      # changes as the bot so an error never yields a green. If the token mint
+      # itself failed there is no bot identity to post as — fail red (still no
+      # spurious pass), which is the safe outcome.
+      - name: Fail closed — request changes as minspec-sdd[bot] on any error
+        if: failure() && steps.guard.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # Human-reviewer fallback (see Post step). Repo variable if set, else owner.
+          REVIEWERS: ${{ vars.AI_REVIEW_HUMAN_REVIEWERS }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -uo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::App token unavailable (mint failed) — cannot post as the bot. Failing red; no spurious pass."
+            exit 1
+          fi
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$(printf '## 🤖 AI review — `ai-review:changes` (fail-closed)\n\nThe AI review workflow errored before producing a clean verdict, so it is requesting changes. This is a fail-closed default — an error must never yield a green. See the [workflow run](%s).\n\n_Posted by minspec-sdd[bot]._' "$RUN_URL")"
+          gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "ai-review:changes"
+          gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "ai-review:pass" 2>/dev/null || true
+          gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "ai-review:pending" 2>/dev/null || true
+
+          # Fail-closed → pull a human in (same as the Post step). The bot-only label
+          # allowlist means a fail-closed PR needs a human to resolve it. All calls
+          # are best-effort (`|| true`) and MUST NOT change the honest red status —
+          # the `exit 1` below still stands regardless of their outcome.
+          REVIEWERS="${REVIEWERS:-$OWNER}"
+          gh label create "needs-human-review" --repo "$REPO" \
+            --color FBCA04 --description "AI review failed closed — a human must resolve" 2>/dev/null || true
+          gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "needs-human-review" 2>/dev/null || true
+          gh pr edit "$PR_NUMBER" --repo "$REPO" --add-reviewer "$REVIEWERS" 2>/dev/null || true
+          # Re-fail so the job status honestly reflects the error (label recovered).
+          exit 1
+
+      # ── Honest, 3-way `ai-review` verdict CHECK-RUN (#480, built on #469) ────
+      # The runner job's own success only means "the reviewer RAN" — NOT "the PR
+      # PASSED". So post the authoritative `ai-review` check-run whose CONCLUSION
+      # MIRRORS THE VERDICT, computed by the tested pure helper decideReviewCheck,
+      # now 3-way so `ai-review` is safe to make an ALWAYS-ON REQUIRED ruleset
+      # check (#480 — GitHub required checks: `neutral` PASSES, only `failure`
+      # blocks):
+      #   isMachineryPr → neutral   (self-exempt; wins over the label — a gate
+      #                   can't certify a change to itself, so `.github/`/
+      #                   `scripts/` PRs stay merge-able and a human reviews)
+      #   ai-review:pass → success  (genuinely passed independent review)
+      #   anything else  → failure  (BLOCKS the required check — changed from
+      #                   #469's `neutral`, which a required check reads as
+      #                   passing and so never gated a normal `changes` verdict)
+      # `isMachineryPr` reuses the review step's `is_machinery` output, which is
+      # the SAME predicate as the self-edit override above (SELF_EDIT_KIND ==
+      # "machinery"), not a second definition. Fail-closed: an empty
+      # `steps.review.outputs.label` (review step errored) is NOT machinery
+      # (defaults false) → failure, never a false neutral/green.
+      #
+      # Runs `if: always()` so the check is posted on both the pass and the
+      # fail-closed paths, but only when the reviewer is configured. Posted AS THE
+      # BOT (App token) to match the comment/label provenance. This check-run is
+      # now the intended REQUIRED merge gate for normal PRs (once added to the
+      # branch ruleset) — machinery PRs are gated by human review instead, since
+      # a gate cannot certify itself. Best-effort: a missing `checks: write` App
+      # permission degrades to a warning (the honest check is then simply absent
+      # — never a false green), and this step never changes the job's honest
+      # status. Only trusted values reach the shell (App token, repo slug, the
+      # GitHub-assigned head SHA, and our own gate's label/machinery flag) — no
+      # PR-controlled text.
+      - name: Post honest `ai-review` verdict check-run as minspec-sdd[bot]
+        if: always() && steps.guard.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # Our own gate's output (`ai-review:pass` / `ai-review:changes`), NOT any
+          # PR-controlled text. Empty if the review step never completed → failure.
+          VERDICT_LABEL: ${{ steps.review.outputs.label }}
+          # Same machinery predicate as the self-edit override (SELF_EDIT_KIND ==
+          # "machinery"), reused via the review step's own output — not a second,
+          # divergent definition. Empty/missing (review step never completed)
+          # defaults to "false" below, never a false machinery exemption.
+          IS_MACHINERY: ${{ steps.review.outputs.is_machinery }}
+        run: |
+          set -uo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning title=ai-review check not posted::No App token (mint skipped/failed) — cannot post the ai-review verdict check-run. The label/comment remain authoritative."
+            exit 0
+          fi
+          # Build the check-run body from the TESTED pure helper (single source of
+          # truth for machinery→neutral / pass→success / changes→failure). node
+          # reads inputs from env, never from an interpolated GitHub Actions
+          # expression — injection-safe.
+          # (NB: an Actions expression written literally here would be evaluated even
+          # inside this shell comment — an empty one fails workflow load; #486.)
+          BODY="$RUNNER_TEMP/ai-review-check.json"
+          # BODY MUST be an ENV var (prefix), not a trailing arg: `node -e '…' BODY=x`
+          # makes BODY a positional argv, so `process.env.BODY` is undefined and
+          # `writeFileSync(undefined,…)` throws → "Could not compute the verdict
+          # check-run body" → the check-run never posted (silently, exit 0). #486-sibling.
+          if ! BODY="$BODY" node -e '
+            const g = require(process.env.GITHUB_WORKSPACE + "/.github/scripts/ai-review-guard.js");
+            const c = g.decideReviewCheck(process.env.VERDICT_LABEL || "", process.env.IS_MACHINERY === "true");
+            const fs = require("fs");
+            fs.writeFileSync(process.env.BODY, JSON.stringify({
+              name: c.name,
+              head_sha: process.env.HEAD_SHA,
+              status: "completed",
+              conclusion: c.conclusion,
+              output: { title: c.title, summary: c.summary },
+            }));
+            process.stderr.write("ai-review verdict=" + (process.env.VERDICT_LABEL || "<none>") + " machinery=" + (process.env.IS_MACHINERY || "false") + " → conclusion=" + c.conclusion + "\n");
+          '; then
+            echo "::warning title=ai-review check not posted::Could not compute the verdict check-run body. The label/comment remain authoritative."
+            exit 0
+          fi
+          # POST the check-run on the PR head SHA as the bot. Best-effort: a failure
+          # (e.g. the App lacks `checks: write`) must NOT red the run.
+          if ! gh api -X POST "repos/$REPO/check-runs" --input "$BODY" >/dev/null; then
+            echo "::warning title=ai-review check not posted::Posting the ai-review verdict check-run failed (grant the minspec-sdd App \`checks: write\`). The label/comment remain authoritative."
+          fi
+          exit 0
+# <<< minspec:managed:ai-review-workflow <<<

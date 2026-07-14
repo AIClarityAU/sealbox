@@ -73,6 +73,9 @@
   ".github/scripts/ai-review-guard.js": {
     "ai-review-guard": "8cefc8f6102c907583ee0a7dd624f7d7d8c2c18debc0f2c4fcb1092235003db0"
   },
+  ".claude/commands/minspec-constitution.md": {
+    "slash-claude-constitution": "840851f65cacee0b553710cabaec73f9691b1793a9ac31cb917ff7bc1fc27bda"
+  },
   ".claude/commands/minspec-specify.md": {
     "slash-claude-specify": "68f62d397d9151e6b89a3b2dcbfea2a39beedc196dca51deeea080f514d66729"
   },
@@ -91,7 +94,10 @@
   ".claude/commands/minspec-implement.md": {
     "slash-claude-implement": "bbebff835866c7a947876fa317541d1b882779d61470cc8be1c7c4e2ed6b24f3"
   },
+  ".claude/commands/minspec-checklist.md": {
+    "slash-claude-checklist": "0c01d10cebab4efa75721c9c157f2c8ef1c5eac539aa016d3ccf708dc48d208b"
+  },
   ".cursor/rules/spec-kit-commands.mdc": {
-    "slash-cursor": "fc91a3b1bd0cacc71a20e155c84faae237669eba6078a625bebdfc35cdc909f9"
+    "slash-cursor": "dface16a1e5ba89c395647ece13ece82154be8ff037d60d545455651f81751ab"
   }
 }

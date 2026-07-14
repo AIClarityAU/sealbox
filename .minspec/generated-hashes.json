@@ -14,8 +14,8 @@
     "Decision Records": "20f8d8123316df2b507c6b0cab2910d0ca724caf2c2e310187d8be4a5eae20ca",
     "Constitution": "a25420391827752c0c7199059dc2cdb79638c16194f8c32dfd6b834eca97dcc2",
     "Task Classification Guide": "0a7ae8bd304b4844cdd81dcd3e36a2a3c8aeee6c382d246f926d462f89b98972",
-    "Rules": "75f6014e495beb70eee624e077daadeb40a026552050e2897e2b82177bc5566e",
-    "Spec Kit Slash Commands": "ab9ad9bd8ec0bf4bc241f0094df9a1fc14cb29a608213069a9414657aaae0a40"
+    "Rules": "bb5b6cb560170593d8e0fc3fe78a19c9a35ca71f5dabfe7692948e503dac333b",
+    "Spec Kit Slash Commands": "08c10b40494f21fde4350063c16956da8358a4015b219761598c62e215deab4e"
   },
   ".cursorrules": {
     "__preamble__": "db1f45591445a348085532439fe3534401fbf497df8693de0c76533ea6306fc2",
@@ -27,9 +27,9 @@
   },
   ".minspec/constitution.md": {
     "__preamble__": "138f4e4e939f67dc6c092a21ed1cc5e2b7614e39da11a4940b331874a4781e3e",
-    "Invariants": "833360637203dee3e4b64f8c70892e09ad49636a9f5eac062f246ee0a11250d1",
-    "Principles": "c8d035d2bd589efaf8aa76ddb46cd6f2b81d83bc6f0080b7f695e7aa3862180d",
-    "Constraints": "b366eee3d8b4e3d299eb87c1a43bdb007a4e77686dcb37698506860bd94a4b7f",
+    "Invariants": "85132ba883d12e49bc48a9a88c3fcb5c9a056be06f1876d16f7f291faea4228a",
+    "Principles": "8fbbdbd8ee22d7ab806fca85a2083c3f61fbb2fec05d2b0d156b9101c1739d54",
+    "Constraints": "bac8bc4588d9aa30e081dcc97de4a3c7c804fef657cbfbf451ce8175dfb8d24c",
     "Goals": "c47bf6f04da448a5bcdd88ac5ed89c761033cc3c27f06a27e672839bc5a6f809"
   }
 }

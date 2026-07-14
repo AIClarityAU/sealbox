@@ -59,12 +59,14 @@ Generic agents can invoke the following commands. Each routes to a MinSpec SDD p
 
 | Command | Phase | Purpose |
 |---|---|---|
+| `/minspec-constitution` | Constitution | Author or update .minspec/constitution.md — invariants, principles, constraints, goals |
 | `/minspec-specify` | Specify | Start or update the Specify phase for the active MinSpec spec |
 | `/minspec-clarify` | Clarify | Resolve open questions before planning |
 | `/minspec-plan` | Plan | Draft the technical approach for the active spec |
 | `/minspec-tasks` | Tasks | Break the plan into ordered, checkable tasks |
 | `/minspec-analyze` | Analyze | Cross-check spec, plan, and tasks for consistency |
 | `/minspec-implement` | Implement | Execute the task list against the active spec |
+| `/minspec-checklist` | Checklist | Generate a requirements-quality checklist for the active spec |
 
 Full per-command instructions live in `.claude/commands/*.md` (Claude Code) and `.cursor/rules/spec-kit-commands.mdc` (Cursor) when those tools are detected.
 
