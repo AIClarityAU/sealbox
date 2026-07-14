@@ -2,7 +2,7 @@
   "CLAUDE.md": {
     "__preamble__": "1c8cac95fb37fa1dfd21c44c63393dd92fa06fed366e89f9001a6b51ae300f2d",
     "Overview": "2b7240856ab97aeef39eac011acad0cd4f8a97ef70ac947205b38903966811b8",
-    "Invariants": "5d5d5c2c84564cd4e2ed8499afe43ed2fa85141713eaeeccbe59c7ee4021b70c",
+    "Invariants": "7f204767fb311647a0999641bbbd332f36a44ad386d3a3b75631cfd61ee7a0a2",
     "SDD Methodology": "bbb968d7be5aebe45495f7e024f292888ef1aad33610f090212e913fa8c93d28",
     "File Locations": "7c8f5347eec33d9917104252890ef5c4912b6997cb7ea689f451095b1b712321",
     "Commands": "87cfdc02e99db3b20b1d0be46de5d5957e0250021fd75d3eb5d0bc3646d6a7f8"
@@ -12,24 +12,24 @@
     "For AI Coding Assistants": "ac63945b95c8c30d417c92045ccd4645cfd97132e4e703e3d1e32d5e55c30623",
     "Specs Directory": "89cd45fd505b93d5cbf09be9388d92f7efa7feac21c9fd18d571ff7838c508ff",
     "Decision Records": "20f8d8123316df2b507c6b0cab2910d0ca724caf2c2e310187d8be4a5eae20ca",
-    "Constitution": "7d65ab19e0d67761f8dd302bb696c42bf8d7436f7b569ad273db1ee6690839b1",
+    "Constitution": "740732d5d138f86a8991730e0780dc10e01949a3771bfd7f7f48aa470f0ab986",
     "Task Classification Guide": "0a7ae8bd304b4844cdd81dcd3e36a2a3c8aeee6c382d246f926d462f89b98972",
     "Rules": "75f6014e495beb70eee624e077daadeb40a026552050e2897e2b82177bc5566e",
-    "Spec Kit Slash Commands": "336ffe2e65dda58fd2c66c03f4eb1067f0974edd18b7ec35afd7d2ab691162fc"
+    "Spec Kit Slash Commands": "ab9ad9bd8ec0bf4bc241f0094df9a1fc14cb29a608213069a9414657aaae0a40"
   },
   ".cursorrules": {
     "__preamble__": "db1f45591445a348085532439fe3534401fbf497df8693de0c76533ea6306fc2",
     "Project Context": "c56fd6ffbf458f31f9ac33046835ee6d110d9902fe55678e5b74939276cac59e",
-    "Invariants": "2e6ef0a7e5f75a0803d8bfac10d60241fe996ec4a8627b2bf342cde2e8186121",
-    "Principles": "67acb9989cc8918dd39b52df1bd452219908cd44e267cdfdc07ce1b1af7101df",
+    "Invariants": "ffaca8c114ea0d84a10c4b7f3b5666703b1b8a49e7028f457917d1ce93f5609f",
+    "Principles": "703c9ccc78452793bdbaf5463fb69e23fb86fb76e0d4c9404e26a51218b41b26",
     "Before Making Changes": "7b3bdfacb27375a90eb52c71d1de9995e0000fb50da312d1c8b3f17385644bd7",
     "Coding Standards": "89ab084719acfcbe5296dfb31a2f302c2ef49f8f0e3cdbc528e125244af758fb"
   },
   ".minspec/constitution.md": {
     "__preamble__": "138f4e4e939f67dc6c092a21ed1cc5e2b7614e39da11a4940b331874a4781e3e",
-    "Invariants": "b24cf758849cedce8269447ce05a923df3530b59a68bd379f4d6f80c7d4b3d74",
-    "Principles": "d3ac39276aac11c507752771da45377154e9628fa15be4da3010a7b85a2688f9",
-    "Constraints": "7a870ce7154b580cdb5c7ddc037b9c0dbd28739b77f40732378e73ec09d68ec7",
-    "Goals": "633e15d82746c5dad2a30df412cb06344a2457f894c9aecfe52b53623b2583e5"
+    "Invariants": "da1fb6f1308aec34ca50863d60989938c2470349b6a5be88c3b36d091506e35f",
+    "Principles": "4ed0669a515e329fd47f21c0e6bf657c4244f95a50f08705f8264291937d1c62",
+    "Constraints": "aa4a3ae012a9c3803dec9e404d9e47bc469d342832235a7c913b863c32aceef0",
+    "Goals": "1d1a62582fa61c6421409d028b487e9c9993d4a81e9cc90d90fe94abc23200d0"
   }
 }

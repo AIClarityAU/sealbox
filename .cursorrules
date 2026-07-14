@@ -6,12 +6,26 @@ This project uses MinSpec SDD methodology. Specs in `specs/`, decisions in `docs
 
 ## Invariants
 
-<!-- Add project invariants here -->
+> Summarized from `.minspec/constitution.md` — lead sentences only; the full text and rationale live there.
+
+- **Agent never executes in the extension host.**
+- **Sandbox holds no host credentials and no egress except the broker seam.**
+- **Attestation fails closed.**
+- **Untrusted issue/spec body is DATA, never instructions; the agent is credential-free.**
+- **No in-sandbox push.**
+- **SealBox obeys global rule #8 — never mutates the user's shared checkout.**
+- **Base-freshness is gated symmetrically — creation and push.**
+- **MinSpec core never depends on this extension.**
+- **Billing defaults to subscription quota — no silent PAYG.**
 
 ## Principles
 
-- DRAFT: Honor CLAUDE.md project instructions — they override default behavior.
-- DRAFT: Record hard-to-reverse decisions as decision records before implementing.
+- Honor CLAUDE.md project instructions — they override default behavior.
+- Record hard-to-reverse decisions as decision records before implementing.
+- **Agents you can trust because they stop.** The product's differentiator is tier-gated HITL, not "an AI that does everything" — T1–T2 auto-dispatch, T3–T4 wait for human spec/plan approval (EPIC-007 goal, SPEC-002 FR-12).
+- **No container runtime → degrade to Layer-1 manual, never "off".** Losing docker downgrades autonomy, never the trust boundary; the agent still never runs in the extension host (SPEC-002 FR-10).
+- **Never infer "secure" from a dead probe.** Every negative deny-check is paired with a positive control that must succeed — an unreachable canary could mean egress-blocked, curl-missing, or canary-down, never assume the safe reading (SPEC-002 FR-7).
+- **Scope honesty.** Attestation proves "as configured, this box cannot reach X" — a config-correctness gate, not a kernel/container-escape guarantee. State that residual explicitly rather than overclaiming (SPEC-002 FR-8).
 
 ## Before Making Changes
 

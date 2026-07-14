@@ -43,25 +43,25 @@
   ".minspec/hooks/validate.py": {
     "validate-py": "2d9199b9a789e933b8bde8d062ba8a1af649575cfd244c59dbed8af9c8c9de8c"
   },
-  ".claude/commands/specify.md": {
-    "slash-claude-specify": "0cdd8be0c9e045bba3de5dc2674797556caa9882e34b45af84e30039e9f34c4a"
+  ".claude/commands/minspec-specify.md": {
+    "slash-claude-specify": "68f62d397d9151e6b89a3b2dcbfea2a39beedc196dca51deeea080f514d66729"
   },
-  ".claude/commands/clarify.md": {
-    "slash-claude-clarify": "06c4fd869faa3f51d2a81ede2d5096bafb7abecfbbb1c7fad588f4341255d476"
+  ".claude/commands/minspec-clarify.md": {
+    "slash-claude-clarify": "0d1f5a3e7c0d6dafab530a7d9de8463eec1ef21b874a4b44ff8ad6bd40743d29"
   },
-  ".claude/commands/plan.md": {
-    "slash-claude-plan": "46570fed11a2a5d66289fe602be7da3a91fb1366f357af322f5611ccff720b42"
+  ".claude/commands/minspec-plan.md": {
+    "slash-claude-plan": "b72e95dbb675797851ed8e42ee2587d4d47183717fb04fdb1d4142d2e116ae4e"
   },
-  ".claude/commands/tasks.md": {
-    "slash-claude-tasks": "bf6c7a77ac8cd9377b580a8d95927dad2117f2f03b60d7d6d391748ac9aa2b8f"
+  ".claude/commands/minspec-tasks.md": {
+    "slash-claude-tasks": "123feaa955094a707f54d82219a531a9ae1a4d53e647f538391e939d7ee30a37"
   },
-  ".claude/commands/analyze.md": {
-    "slash-claude-analyze": "6c317f606f7def2805a6645fe4e3d27e45b373dbf9f42eb340bc5df8de619507"
+  ".claude/commands/minspec-analyze.md": {
+    "slash-claude-analyze": "4629f73d2673283a91abbc3b6d6ac84caa1603c2eacf81f111c1f338fb108463"
   },
-  ".claude/commands/implement.md": {
-    "slash-claude-implement": "d666bf706b847b39a0e8c5739955eef36015ef41eb836c59525d4f8d80376903"
+  ".claude/commands/minspec-implement.md": {
+    "slash-claude-implement": "bbebff835866c7a947876fa317541d1b882779d61470cc8be1c7c4e2ed6b24f3"
   },
   ".cursor/rules/spec-kit-commands.mdc": {
-    "slash-cursor": "cb02be832a6029b61efcd97e620558c4e2a42ff530ebb957c235ffc6b470b520"
+    "slash-cursor": "fc91a3b1bd0cacc71a20e155c84faae237669eba6078a625bebdfc35cdc909f9"
   }
 }
