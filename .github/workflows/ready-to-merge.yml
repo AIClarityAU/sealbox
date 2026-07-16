@@ -92,6 +92,7 @@ permissions:
   statuses: write        # post the `ready-to-merge` commit status on the PR head SHA
   pull-requests: write   # remove a stale/forged `ai-review:pass` + post an audit comment
   issues: read           # read the PR's label timeline (issue events API) for pass provenance
+  checks: read           # read the reviewer App's `ai-review` check-run on the head SHA (#810)
   contents: read         # checkout the trusted base commit + read the head commit's timestamp
 
 jobs:
@@ -241,32 +242,43 @@ jobs:
               });
             }
 
-            // ── #466 SHA-bound witness — the CURRENT head SHA must carry
-            //    `ai-review/pass`=success from an allowlisted reviewer. This is the
-            //    EXACT recency proof the timestamp check only approximates. OPTIONAL
+            // ── #810 SHA-bound witness — the CURRENT head SHA must carry a
+            //    completed `ai-review` CHECK-RUN (conclusion success = human-pass,
+            //    neutral = machinery exemption) from the reviewer App
+            //    (guard.REVIEW_APP_SLUG). This SUPERSEDES the `ai-review/pass` commit
+            //    STATUS witness (#466): the check-run is the always-on REQUIRED gate
+            //    (#480), so its posting is load-bearing-and-LOUD (a missing required
+            //    check visibly blocks merge) and inherently per-SHA — listForRef on
+            //    the current head can never return a stale old-head run. OPTIONAL
             //    during rollout: enforced only when the trusted BASE guard exposes
-            //    verifyHeadPassStatus; left undefined otherwise, which decideStatus
+            //    verifyHeadReviewCheck; left undefined otherwise, which decideStatus
             //    treats as "not required" (prior behaviour preserved).
-            let headStatus; // undefined ⇒ decideStatus does not require it
+            let headCheck; // undefined ⇒ decideStatus does not require it
             if (
-              typeof guard.verifyHeadPassStatus === 'function' &&
+              typeof guard.verifyHeadReviewCheck === 'function' &&
               labels.includes(guard.PASS) &&
               !provenance.revert &&
               !staleness.strip
             ) {
               try {
-                const statuses = await github.paginate(
-                  github.rest.repos.listCommitStatusesForRef,
-                  { owner, repo, ref: pr.head.sha, per_page: 100 },
-                );
-                headStatus = guard.verifyHeadPassStatus({ statuses, allowlist });
+                const checkRuns = await github.paginate(github.rest.checks.listForRef, {
+                  owner,
+                  repo,
+                  ref: pr.head.sha,
+                  check_name: 'ai-review',
+                  per_page: 100,
+                });
+                headCheck = guard.verifyHeadReviewCheck({
+                  checkRuns,
+                  appSlug: guard.REVIEW_APP_SLUG,
+                });
               } catch (e) {
                 core.warning(
-                  `could not read head commit statuses ${pr.head.sha}: ${e.message}`,
+                  `could not read head check-runs ${pr.head.sha}: ${e.message}`,
                 );
-                headStatus = {
+                headCheck = {
                   verified: false,
-                  reason: 'could not read the head commit statuses to bind the pass (#466)',
+                  reason: 'could not read the head check-runs to bind the pass (#810)',
                 };
               }
             }
@@ -277,7 +289,7 @@ jobs:
               provenanceRevert: provenance.revert,
               stalenessStrip: staleness.strip,
               passProvenance,
-              headStatus,
+              headCheck,
             });
 
             // ── Post the authoritative gate status FIRST (fail closed) ─────

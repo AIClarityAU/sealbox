@@ -231,6 +231,98 @@ function verifyHeadPassStatus({ statuses, allowlist } = {}) {
   };
 }
 
+// #810 — the reviewer App whose `ai-review` CHECK-RUN is the SHA-bound pass
+// witness. HARDCODED on purpose (NOT an env var): an unset env var fails silently
+// the way an empty AI_REVIEW_BOT_LOGINS does, whereas a wrong/missing constant is
+// caught in review. This is the slug of the App that posts the `ai-review`
+// check-run (`minspec-sdd[bot]`); a check-run's `app.slug` is set by GitHub from
+// the creating App's installation token and cannot be forged by a user token.
+const REVIEW_APP_SLUG = 'minspec-sdd';
+
+// #810 — SHA-bound pass witness via the reviewer App's `ai-review` CHECK-RUN.
+//
+// Supersedes verifyHeadPassStatus (the `ai-review/pass` commit-STATUS witness,
+// #466). Both the status and the check-run are posted best-effort by the reviewer
+// workflow, but the check-run is the one signal that is ALSO an always-on REQUIRED
+// ruleset check (#480) — so its posting is load-bearing-and-LOUD (a missing
+// required check visibly blocks merge), whereas a missing `ai-review/pass` status
+// is SILENT. Reading the check-run collapses two independently-failing best-effort
+// posts into the single signal that must already work, is inherently SHA-bound
+// (check-runs are per-SHA by construction, so checks.listForRef on the current head
+// can never return a stale old-head run), and is App-provenanced (a user token
+// cannot mint a check-run under the reviewer App's slug).
+//
+// `checkRuns` is the check-run list for the CURRENT head SHA (checks.listForRef,
+// check_name='ai-review'); `appSlug` is the reviewer App's slug (REVIEW_APP_SLUG).
+// `verified` iff the MOST RECENT matching run (by started_at, tiebreak id) is
+// `status:'completed'` with `conclusion` success (human-pass) or neutral (machinery
+// exemption). Absence / not-completed (queued/in_progress) / newest-is-failure /
+// a caller-signalled API error all ⇒ verified:false ⇒ ready-to-merge red.
+//
+// NOTE — accepting `neutral` here does NOT green machinery PRs: decideStatus still
+// requires passVerified (an allowlisted `ai-review:pass` label) AND !CHANGES, and
+// machinery PRs are force-labelled `ai-review:changes` with no pass, so they stay
+// red exactly as today. `neutral` is accepted only so a human who genuinely reviews
+// and passes a machinery PR is not blocked by the App's own machinery-exemption run.
+function verifyHeadReviewCheck({ checkRuns, appSlug } = {}) {
+  const slug = String(appSlug == null ? '' : appSlug).toLowerCase();
+  if (!slug) {
+    return {
+      verified: false,
+      reason:
+        'no reviewer App slug configured — head check-run provenance cannot be verified',
+    };
+  }
+  const ours = (Array.isArray(checkRuns) ? checkRuns : []).filter(
+    (r) =>
+      r &&
+      r.name === CHECK_NAME &&
+      r.app &&
+      String(r.app.slug == null ? '' : r.app.slug).toLowerCase() === slug,
+  );
+  if (ours.length === 0) {
+    return {
+      verified: false,
+      reason: `no \`${CHECK_NAME}\` check-run from \`${sanitizeLogin(
+        appSlug,
+      )}\` on the current head commit — the greenlight does not correspond to this SHA (#810)`,
+    };
+  }
+  // Most-recent wins: when retries produce several runs, an OLD success must never
+  // override a NEWER failure/in-progress. Order by started_at, tiebreak on id
+  // (monotonic — a later run has the larger id).
+  const latest = ours.reduce((a, b) => {
+    const ta = Date.parse(a.started_at);
+    const tb = Date.parse(b.started_at);
+    if (Number.isFinite(ta) && Number.isFinite(tb) && ta !== tb) return tb > ta ? b : a;
+    if (Number.isFinite(tb) && !Number.isFinite(ta)) return b;
+    if (Number.isFinite(ta) && !Number.isFinite(tb)) return a;
+    return Number(b.id) >= Number(a.id) ? b : a;
+  });
+  if (latest.status !== 'completed') {
+    return {
+      verified: false,
+      reason: `\`${CHECK_NAME}\` on the current head is '${sanitizeLogin(
+        latest.status,
+      )}', not completed`,
+    };
+  }
+  if (latest.conclusion !== 'success' && latest.conclusion !== 'neutral') {
+    return {
+      verified: false,
+      reason: `\`${CHECK_NAME}\` on the current head concluded '${sanitizeLogin(
+        latest.conclusion,
+      )}', not success/neutral`,
+    };
+  }
+  return {
+    verified: true,
+    reason: `\`${CHECK_NAME}\`=${sanitizeLogin(
+      latest.conclusion,
+    )} on the current head SHA, from the reviewer App`,
+  };
+}
+
 // Compute the `ready-to-merge` commit status. The status is the authoritative
 // gate, so it is derived from the *decided* effective label set (pass removed if
 // it was reverted or stripped) AND from the provenance-recency verification of
@@ -239,19 +331,21 @@ function verifyHeadPassStatus({ statuses, allowlist } = {}) {
 //
 // Bare label presence is never trusted: a present `ai-review:pass` with absent
 // or unverified `passProvenance` yields a red status (deny-by-default).
-function decideStatus({ labels, provenanceRevert, stalenessStrip, passProvenance, headStatus } = {}) {
+function decideStatus({ labels, provenanceRevert, stalenessStrip, passProvenance, headCheck } = {}) {
   const eff = new Set(Array.isArray(labels) ? labels : []);
   if (provenanceRevert || stalenessStrip) eff.delete(PASS);
 
   const passPresent = eff.has(PASS);
   // A surviving pass counts only if its provenance was verified upstream.
   const passVerified = passPresent && !!(passProvenance && passProvenance.verified);
-  // #466 — the SHA-bound witness must ALSO confirm THIS head was the reviewed one.
-  // `headStatus` is OPTIONAL: when omitted (a caller/base guard that predates #466,
-  // during rollout) it is NOT required — behaviour is unchanged. When supplied it
-  // gates: an unverified head status blocks green even with a provenance-verified
-  // label (that is exactly the stale-pass-on-a-new-head case #466 closes).
-  const headVerified = headStatus === undefined ? true : !!(headStatus && headStatus.verified);
+  // #810 — the SHA-bound witness must ALSO confirm THIS head was the reviewed one.
+  // It is now the reviewer App's `ai-review` CHECK-RUN on the current head
+  // (verifyHeadReviewCheck), superseding the `ai-review/pass` commit STATUS (#466).
+  // `headCheck` is OPTIONAL: when omitted (a base guard that predates #810, during
+  // rollout) it is NOT required — behaviour is unchanged. When supplied it gates: an
+  // unverified head check-run blocks green even with a provenance-verified label
+  // (that is exactly the stale-pass-on-a-new-head case this closes).
+  const headVerified = headCheck === undefined ? true : !!(headCheck && headCheck.verified);
   const isGreen = passVerified && headVerified && !eff.has(CHANGES);
 
   let description;
@@ -267,10 +361,10 @@ function decideStatus({ labels, provenanceRevert, stalenessStrip, passProvenance
       }`,
     );
   } else if (passPresent && passVerified && !headVerified) {
-    // #466 — the label is trustworthy but is not bound to THIS commit's review.
+    // #810 — the label is trustworthy but is not bound to THIS commit's review.
     description = truncate(
       `ai-review:pass not bound to this commit — ${
-        (headStatus && headStatus.reason) || 'no ai-review/pass status on the current head SHA'
+        (headCheck && headCheck.reason) || 'no ai-review check-run on the current head SHA'
       }`,
     );
   } else if (isGreen) {
@@ -400,6 +494,8 @@ module.exports = {
   verifyPassProvenance,
   verifyHeadPassStatus,
   PASS_STATUS_CONTEXT,
+  verifyHeadReviewCheck,
+  REVIEW_APP_SLUG,
   decideStatus,
   decideReviewCheck,
   isBenignRemovalError,
