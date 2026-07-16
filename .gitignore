@@ -23,3 +23,5 @@ dist/
 
 .minspec/generated-hashes.json
 .minspec/template-baseline.json
+
+.minspec/queue/

@@ -38,16 +38,16 @@
     "pre-commit-hook": "6c22cb0c6212ad07192a9b047491ab9cbc3a1c78123020b5b75a2179d8f594c0"
   },
   ".minspec/hooks/commit-msg": {
-    "commit-msg-hook": "0f4a9f7da34dbfbb8dc9945edb1ea5e8528e638e55c45b75492ec65f01bf566f"
+    "commit-msg-hook": "0dd47dba8c95d01ce2fd18034805c4e8dc31607ac42d632f242c28a09969b9b5"
   },
   ".minspec/hooks/validate.py": {
     "validate-py": "2d9199b9a789e933b8bde8d062ba8a1af649575cfd244c59dbed8af9c8c9de8c"
   },
   ".github/workflows/ai-review.yml": {
-    "ai-review-workflow": "a52c602696ed94aac5e931d9bdacf1e28053a6e9213bf7421854108cea2748ba"
+    "ai-review-workflow": "0ad49dcb9629ba4ac40a3906d249cf7d7d488dceaff162605833f556e83ff45b"
   },
   ".github/workflows/ready-to-merge.yml": {
-    "ready-to-merge-workflow": "e0254fcd20fde306869612fbe0f20ac823822bbb9550c5bce859999d7029a65d"
+    "ready-to-merge-workflow": "9dcd49d0e25aaedf60ef63e2a282cbf5fee035194efa0a3e33ff9095b8101098"
   },
   ".github/workflows/ai-review-retry.yml": {
     "ai-review-retry-workflow": "80af64756917bcf9682b64c34b9cc03171a645c5a6c95b935535a488a3089c14"
@@ -71,7 +71,7 @@
     "review-role-skeptic": "c3f141f7fd7380864763a8b5fb82c7c873f6c175fc8131c1272fd00a08f0374b"
   },
   ".github/scripts/ai-review-guard.js": {
-    "ai-review-guard": "8cefc8f6102c907583ee0a7dd624f7d7d8c2c18debc0f2c4fcb1092235003db0"
+    "ai-review-guard": "851e932bf806489fb2dff91a8dcce510a761246b6ac8e8352c734563c6049a9e"
   },
   ".claude/commands/minspec-constitution.md": {
     "slash-claude-constitution": "840851f65cacee0b553710cabaec73f9691b1793a9ac31cb917ff7bc1fc27bda"
