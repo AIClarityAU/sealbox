@@ -31,6 +31,7 @@ Claude Code now ships Workflow + background agents that fan out with per-agent `
 
 *Status: proposed · Date: 2026-07-16*
 
+<!-- dr-summary:DR-048 auto=pending -->
 Implements DR-047's ruling. Measured: a transparent proxy tops ~10-15% for a cached agentic user because 74% of spend is fat cache-efficient Opus turns that route at −228% (cache thrown away). The token-savings engine is **sub-thread delegation** — keep an expensive lean **spine**, peel *simple + self-contained* sub-tasks onto separate **limited-context** threads on the cheapest-adequate model (little cache to lose → genuinely cheap). Only truthful where SealBox **is** the orchestrator (the broker), never on the live-CC wire (DR-047 §1). Broker owns an offline deterministic picker; Scrooge *recommends* when present (API-key mode); subscription-mode Scrooge is out-of-wire (#74/#407) so the picker must be broker-owned. **INV-DISCLOSURE** (headless counterpart of scrooge DR-016 INV-16): the outcome record states the per-sub-task model that *actually ran*, broker-metered, authored before any auto-pick. Live-CC surface is **advise-only** (offload nudge). The **≥25% is projected, not measured** (autonomous work doesn't exist yet). 4 founder decisions surfaced (positioning lead, subscription-`$` honesty, savings baseline/risk, receipt visibility). Born proposed; no code.
 <!-- /dr-summary:DR-048 -->
 <!-- minspec:dr-index:end -->
