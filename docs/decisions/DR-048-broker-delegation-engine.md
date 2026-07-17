@@ -124,7 +124,7 @@ classifier, and respect its proven limit.** The picker's inputs are the content-
 shadow classifier already derives (`classify.mjs`: `difficulty` 0..1, `task_type`, `delegatable`,
 `ask_chars` — **labels/sizes derived in-memory, never prompt content** — the same content-safety
 property that instrument was built with, distinct from any numbered invariant), recomputed
-Tier-0/offline per sub-task by the broker. Because the picker consumes only these labels — never
+per sub-task by the broker. Because the picker consumes only these labels — never
 the raw body — the untrusted issue/spec/tool body stays **data, not instructions** to the planner
 (invariant #4): a prompt-injected body can at worst provoke a bad/costly *pick*, never an action
 or exfil, bounded by the credential-free exec plane + broker-only egress.
@@ -139,16 +139,33 @@ upward-only ratchet:
   whose expected success on this task-shape clears a confidence bar*, not "cheapest model."
 - **Only peel `delegatable === true`.** A `continuation` (tool_result turn) or `complex` ask is
   not cleanly peelable — leave it on the spine, where the context is.
+- **The labels are a floor, not the ceiling — the picker MAY use the network (see §5).** SealBox is
+  **Tier-1**: the host-side broker is network-capable *by design* (Goal 1 — "credentials, network,
+  and autonomy live only behind this boundary"; invariant #2 constrains the **sandbox's** egress,
+  not the broker's). So the picker is **not** limited to the regex heuristic: a **cheap LLM
+  adequacy judge** (e.g. a few hundred Haiku tokens, ~$0.001/sub-task — economically trivial
+  against the delegation saving) can judge "could a cheap model do this sub-task?" far better than
+  mechanical-scope signals, directly attacking the κ=0.80 limit above. Treat the deterministic
+  label picker as the **always-available floor** (works with no network and no Scrooge) and the
+  LLM judge as an upgrade the broker may use when reachable. **Open:** whether the judge is v1 or
+  a later ratchet (Costly-to-Refactor).
 
-**5 — The broker owns a built-in Tier-0 deterministic picker; Scrooge is an optional
-*recommender*, never the authority.** This resolves DR-047's costly-to-refactor interface OQ, and
-the subscription ToS constraint forces it: in subscription-default mode (the common path) Scrooge
+**5 — The broker owns the picker; the binding constraint is "works without *Scrooge*", NOT
+"offline".** This resolves DR-047's costly-to-refactor interface OQ, and the subscription ToS
+constraint forces it: in subscription-default mode (the common path) Scrooge
 is **not in the wire at all** (#74/#407), so if the pick were *delegated* to Scrooge the default
-path would have **no picker**. The picker therefore lives in the broker and runs **offline by
-design** (a deterministic Tier-0 picker using only local classifier labels, no network — so the
-default subscription path needs no Scrooge and no egress to choose a model; this is a design
-property of the picker, not SealBox constitution invariant #1, which is the separate
-"agent never executes in the extension host" rule). When installed (opt-in API-key mode) Scrooge returns a *recommendation* — the richer
+path would have **no picker**. The picker therefore lives in the broker and must be
+**Scrooge-independent** — self-sufficient when Scrooge is absent, uninstalled, or out-of-wire.
+> **Do not conflate Scrooge-independence with air-gapping.** An earlier draft called this a
+> "Tier-0 offline picker, no network". That is **MinSpec's** posture (its constitution's
+> works-offline invariant; SealBox invariant #8 exists precisely to keep *MinSpec* air-gapped) —
+> it is **not SealBox's**. SealBox is the **Tier-1** boundary *behind which network lives*
+> (Goal 1). Nothing forbids the broker's picker from using the network; the deterministic
+> label-only path is a **fallback floor** (nice for no-network/no-Scrooge robustness), not a
+> policy requirement. Conflating the two would have foreclosed the LLM adequacy judge (§4) — the
+> single best mitigation for the classifier's proven weakness.
+
+When installed (opt-in API-key mode) Scrooge returns a *recommendation* — the richer
 brain (live price table, cross-run priors, cache-state awareness, DR-013 attribution). The broker
 **applies or overrides** and is always the actuator + the meter. This keeps the moat honest:
 Scrooge stays *route/cache/measure/**advise*** — advising a machine (the broker) it may act on
@@ -240,7 +257,9 @@ alpha who lives only in live CC and never adopts the offload workflow gets the c
   big-context cache-write onto a cheap model. This is the trap, not the lever.
 - **Delegate the model pick entirely to Scrooge (broker is a dumb relay).** Rejected: in
   subscription-default mode Scrooge is not in the wire (#74/#407), so the default path would have
-  *no picker*. The picker must be broker-owned and offline; Scrooge recommends when present.
+  *no picker*. The picker must be broker-owned and **Scrooge-independent** (self-sufficient when
+  Scrooge is absent) — which is *not* the same as offline: SealBox is Tier-1 and its broker may
+  use the network (§4/§5).
 - **Scrooge returns the authoritative pick even in API mode.** Rejected: makes Scrooge the
   authority over a seam it isn't always present at, and CL-9 already makes the broker the single
   resolution seam. Scrooge advises; the broker actuates + meters.
@@ -270,6 +289,12 @@ alpha who lives only in live CC and never adopts the offload workflow gets the c
   classifier into a *measured* per-repo prior (the classifier finding's demanded
   "sampled-shadow-A/B before acting"), but makes the picker **stateful** (reads the store the
   broker writes) — a scope/architecture decision, not a knob.
+- **Whether the adequacy picker gets a cheap LLM judge (§4), and in v1 or later.** SealBox is
+  Tier-1, so the broker *may* call out: a few-hundred-token Haiku judge (~$0.001/sub-task) would
+  likely beat the mechanical-scope heuristic on the exact axis the κ=0.80 finding says it fails
+  (cognitive difficulty). Load-bearing because it changes the picker's shape (deterministic-only
+  floor vs floor + network-upgrade path) and its failure modes. Do **not** re-derive the picker as
+  offline-only — that was an inherited MinSpec-Tier-0 assumption, not a SealBox constraint.
 - **Peeled sub-threads count against the global concurrency cap (constitution constraint #2).**
   Delegation multiplies in-flight sandboxes; if unbounded it can blow the very window it is trying
   to preserve. The planner must schedule spine + peeled sub-threads under one shared cap — define
@@ -403,7 +428,9 @@ Triggered by: 2026-07-16 sizing the SealBox token-savings engine on measured dog
 a transparent proxy tops out ~10-15% because 74% of spend is cache-efficient fat-Opus turns that
 route at −228%; the ≥25% lever is sub-thread delegation (keep the spine lean, peel self-contained
 sub-tasks onto cheap limited-context threads). Answered: build the delegation engine at the
-SealBox broker (broker-owned offline picker, Scrooge recommends when present), disclose the
+SealBox broker (broker-owned Scrooge-independent picker — Scrooge-independent is not offline;
+SealBox is Tier-1 and the broker may use the network, incl. an optional cheap LLM adequacy
+judge — with Scrooge recommending when present), disclose the
 actually-run model per sub-task as a T0 invariant authored before the picker, keep the live-CC
 surface advise-only, and locate the honest ≥25% headline on the autonomous surface only — with the
 positioning, subscription-`$`, baseline/risk, and team-visibility calls surfaced to the founder.
