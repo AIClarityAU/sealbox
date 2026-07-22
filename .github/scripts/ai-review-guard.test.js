@@ -1,6 +1,9 @@
 // Unit tests for the ai-review label-integrity decision logic.
 // Runs on plain Node (no deps): `node --test .github/scripts/ai-review-guard.test.js`.
-// Wired into CI's lint job so the security-critical decisions stay enforced.
+// NOTE: this repo does not yet run these tests in CI (no test/lint job invokes
+// `node --test`), so a regression in ai-review-guard.js is caught only when this is
+// run manually/locally. Wiring it into a required CI job — and making the test itself
+// parity-managed alongside the guard — is tracked in AIClarityAU/minspec#871.
 
 'use strict';
 
