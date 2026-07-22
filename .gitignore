@@ -25,3 +25,5 @@ dist/
 .minspec/template-baseline.json
 
 .minspec/queue/
+
+.minspec/sessions/
