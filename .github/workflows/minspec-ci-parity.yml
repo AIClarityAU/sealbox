@@ -1,0 +1,130 @@
+# minspec-ci-parity — keep this repo's scaffolded MinSpec CI-review stack in sync (#823)
+#
+# WHY THIS EXISTS (the deadlock it closes)
+# The AI-review / ready-to-merge / guard stack in `.github/` + `scripts/` is SCAFFOLDED
+# into this repo by the MinSpec extension from a single canonical source in
+# AIClarityAU/minspec. When that canonical source evolves and this repo's scaffolded
+# copies are not refreshed, they go STALE — silently. A stale `ai-review.yml` (or a
+# renamed reviewer secret it expects) still marks `ai-review` a REQUIRED check, but the
+# stale guard never posts a pass → `ready-to-merge` stays red → every PR deadlocks and
+# can only land via `--admin`, which bypasses the whole gate. That is the exact
+# #796/#559 2-of-3 class, re-appearing PER downstream repo, and minspec's own CI is
+# structurally blind to it (it cannot see sibling repos).
+#
+# WHAT IT DOES
+# On every PR that touches a managed file, on a weekly schedule (catches upstream drift
+# even with no PR), and on demand, it fetches each managed file's CANONICAL version from
+# minspec's public `main` and byte-compares it against this repo's on-disk copy — after
+# stripping the `minspec:managed:` region markers this repo wraps them in (any comment
+# syntax) and normalising a leading shebang. Any drift fails THIS repo's own CI with a
+# message naming the file, so a human runs `MinSpec: Refresh Harness Files`.
+#
+# Network note: this is CI infrastructure, not the shipped extension (which is Tier-0 /
+# offline). Detecting "stale vs minspec's CURRENT canonical" is only possible by reading
+# that canonical, so this job fetches it over the network — and FAILS CLOSED if it
+# cannot (a gate that cannot verify must never certify).
+name: minspec-ci-parity
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ai-review.yml'
+      - '.github/workflows/ready-to-merge.yml'
+      - '.github/workflows/ai-review-retry.yml'
+      - '.github/scripts/ai-review-guard.js'
+      - 'scripts/review-branch.sh'
+      - 'scripts/review-decide.sh'
+      - 'scripts/roles/*.md'
+      - '.github/workflows/minspec-ci-parity.yml'
+  schedule:
+    # Weekly (Mon 06:17 UTC). The scheduled run is what catches minspec's canonical
+    # moving while this repo has no open PR — the silent-staleness case.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Compare managed CI-review files against minspec canonical
+        env:
+          # Canonical source of truth: minspec's public default branch. The scaffolded
+          # copies in this repo are byte-identical to these (inside the managed markers).
+          MINSPEC_RAW: https://raw.githubusercontent.com/AIClarityAU/minspec/main
+        run: |
+          set -uo pipefail
+
+          # The full set MinSpec scaffolds + manages. A rename/drop upstream that this
+          # list misses would go unchecked, so it MUST mirror gen-ci-templates.mjs SOURCES.
+          FILES="
+          .github/workflows/ai-review.yml
+          .github/workflows/ready-to-merge.yml
+          .github/workflows/ai-review-retry.yml
+          .github/scripts/ai-review-guard.js
+          scripts/review-branch.sh
+          scripts/review-decide.sh
+          scripts/roles/reviewer.md
+          scripts/roles/security.md
+          scripts/roles/architect.md
+          scripts/roles/skeptic.md
+          "
+
+          tmp="$(mktemp -d)"
+          drift=0
+          fetch_fail=0
+
+          for f in $FILES; do
+            [ -n "$f" ] || continue
+
+            if [ ! -f "$f" ]; then
+              echo "::error file=$f::managed file missing from this repo — run 'MinSpec: Refresh Harness Files'"
+              drift=1
+              continue
+            fi
+
+            # Canonical from minspec/main (fail closed — an unverifiable file must not pass).
+            if ! curl -fsSL "$MINSPEC_RAW/$f" -o "$tmp/canon"; then
+              echo "::error file=$f::could not fetch canonical from minspec ($MINSPEC_RAW/$f) — failing closed"
+              fetch_fail=1
+              continue
+            fi
+
+            # This repo wraps each managed file in `minspec:managed:<slug>` markers whose
+            # comment syntax varies by file type (# / // / <!-- -->). Match them by the
+            # sentinel substring and extract the INNER region — that inner content is what
+            # must equal minspec's canonical.
+            awk '/minspec:managed:.*>>>/{f=1;next} /minspec:managed:.*<<</{f=0} f' "$f" > "$tmp/inner"
+
+            # For a shebang'd script the `#!` line sits ABOVE the opening marker (so it is
+            # not in the inner region); drop it from the canonical so the two align.
+            if head -1 "$tmp/canon" | grep -q '^#!'; then
+              tail -n +2 "$tmp/canon" > "$tmp/canon.norm"
+            else
+              cp "$tmp/canon" "$tmp/canon.norm"
+            fi
+
+            if ! diff -q "$tmp/inner" "$tmp/canon.norm" >/dev/null 2>&1; then
+              echo "::error file=$f::DRIFT vs minspec canonical — run 'MinSpec: Refresh Harness Files' to re-sync"
+              echo "--- $f (this repo, managed region)  vs  minspec canonical ---"
+              diff "$tmp/canon.norm" "$tmp/inner" | head -40 || true
+              drift=1
+            fi
+          done
+
+          rm -rf "$tmp"
+
+          if [ "$fetch_fail" != 0 ]; then
+            echo "::error::one or more canonical files could not be fetched from minspec — parity is UNVERIFIED (fail closed)."
+            exit 1
+          fi
+          if [ "$drift" != 0 ]; then
+            echo "::error::this repo's MinSpec CI-review stack has drifted from minspec canonical — see the annotations above."
+            exit 1
+          fi
+          echo "All managed MinSpec CI-review files match minspec canonical."
