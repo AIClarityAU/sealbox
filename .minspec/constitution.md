@@ -23,7 +23,7 @@ Guidelines that should be followed. Can be bent in exceptional circumstances wit
 3. **Agents you can trust because they stop.** The product's differentiator is tier-gated HITL, not "an AI that does everything" — T1–T2 auto-dispatch, T3–T4 wait for human spec/plan approval (EPIC-007 goal, SPEC-002 FR-12).
 4. **No container runtime → degrade to Layer-1 manual, never "off".** Losing docker downgrades autonomy, never the trust boundary; the agent still never runs in the extension host (SPEC-002 FR-10).
 5. **Never infer "secure" from a dead probe.** Every negative deny-check is paired with a positive control that must succeed — an unreachable canary could mean egress-blocked, curl-missing, or canary-down, never assume the safe reading (SPEC-002 FR-7).
-6. **Scope honesty.** Attestation proves "as configured, this box cannot reach X" — a config-correctness gate, not a kernel/container-escape guarantee. State that residual explicitly rather than overclaiming (SPEC-002 FR-8).
+6. **Scope honesty.** Attestation proves "as configured, this box cannot reach X" — a config-correctness gate, not a kernel/container-escape guarantee. State that residual explicitly rather than over-claiming (SPEC-002 FR-8).
 
 ## Constraints
 
