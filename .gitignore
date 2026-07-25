@@ -23,6 +23,10 @@ dist/
 
 .minspec/generated-hashes.json
 .minspec/template-baseline.json
+# Machine-local UI dismissal state (answeredSignatures) + harness worktree
+# checkouts — rewritten/created at runtime, never committed (G-8, minspec parity).
+.minspec/preferences.json
+.claude/worktrees/
 
 .minspec/queue/
 
