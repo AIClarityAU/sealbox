@@ -44,10 +44,10 @@
     "validate-py": "2d9199b9a789e933b8bde8d062ba8a1af649575cfd244c59dbed8af9c8c9de8c"
   },
   ".github/workflows/ai-review.yml": {
-    "ai-review-workflow": "0ad49dcb9629ba4ac40a3906d249cf7d7d488dceaff162605833f556e83ff45b"
+    "ai-review-workflow": "501a6465a17f84b112636b263474a91a4aec3bd236eb7036b650a252197d7c0f"
   },
   ".github/workflows/ready-to-merge.yml": {
-    "ready-to-merge-workflow": "9dcd49d0e25aaedf60ef63e2a282cbf5fee035194efa0a3e33ff9095b8101098"
+    "ready-to-merge-workflow": "297bbd1e3d81c67968b26f43b97808af97a3955e92dce3367c01a34a8ed9320e"
   },
   ".github/workflows/ai-review-retry.yml": {
     "ai-review-retry-workflow": "80af64756917bcf9682b64c34b9cc03171a645c5a6c95b935535a488a3089c14"
@@ -71,7 +71,7 @@
     "review-role-skeptic": "c3f141f7fd7380864763a8b5fb82c7c873f6c175fc8131c1272fd00a08f0374b"
   },
   ".github/scripts/ai-review-guard.js": {
-    "ai-review-guard": "851e932bf806489fb2dff91a8dcce510a761246b6ac8e8352c734563c6049a9e"
+    "ai-review-guard": "d7198c0af505e0a687caea8e6ec813b47925a65363ffa39e5fc89dca748907aa"
   },
   ".claude/commands/minspec-constitution.md": {
     "slash-claude-constitution": "840851f65cacee0b553710cabaec73f9691b1793a9ac31cb917ff7bc1fc27bda"
