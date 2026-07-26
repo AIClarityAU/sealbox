@@ -14,7 +14,11 @@
 #               the working tree's changed files intersected with the docs corpus.
 set -euo pipefail
 
-CORPUS='^(specs/|docs/|\.minspec/approvals/|[^/]+\.md$)'
+# Corpus — MUST stay byte-identical to .github/workflows/docs-lane.yml's `allowed`
+# (the server-side authority) and to minspec's docs-corpus.ts / docs-corpus.sh.
+# skills/ is markdown-ONLY on purpose: a bare skills/ arm would let an executable
+# (skills/foo/run.sh) ride the auto-merging lane.
+CORPUS='^(specs/|docs/|skills/.*\.md$|\.minspec/approvals/|[^/]+\.md$)'
 
 msg=""
 files=()
