@@ -96,7 +96,10 @@ jobs:
           node-version: '22'
 
       # Discovered, not enumerated: a new `*.test.js` is gated the moment it
-      # lands instead of waiting for someone to remember to list it here.
+      # lands instead of waiting for someone to remember to list it here. The
+      # search covers the same two directories the lint job syntax-checks —
+      # scoping discovery narrower than the lint sweep would silently leave a
+      # future suite under `scripts/` ungated.
       #
       # The emptiness check is not defensive padding. `node --test` over a glob
       # that matches nothing exits 0 having run nothing, and `node --test <dir>`
@@ -108,9 +111,9 @@ jobs:
       - name: Run tests
         run: |
           set -euo pipefail
-          mapfile -t suites < <(find .github/scripts -name '*.test.js' -type f | sort)
+          mapfile -t suites < <(find .github/scripts scripts -name '*.test.js' -type f 2>/dev/null | sort)
           if [ ${#suites[@]} -eq 0 ]; then
-            echo "::error title=No test suites found::Expected at least one *.test.js under .github/scripts/. The test gate must not report green over zero suites."
+            echo "::error title=No test suites found::Expected at least one *.test.js under .github/scripts/ or scripts/. The test gate must not report green over zero suites."
             exit 1
           fi
           echo "discovered ${#suites[@]} suite(s):"
