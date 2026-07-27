@@ -1,3 +1,4 @@
+# >>> minspec:managed:docs-lane-workflow >>>
 name: docs-lane
 
 # Option 2 of DR-051's docs-push reconciliation (#575): a docs-only PR that opts
@@ -58,3 +59,4 @@ jobs:
           gh pr merge --auto --squash --repo "$REPO" "$PR"
           gh pr comment "$PR" --repo "$REPO" --body \
             "✅ **docs-lane** — docs-only (${#files[@]} file(s)); auto-merge enabled. Merges once the required checks pass (ai-review still runs). Nothing bypassed." || true
+# <<< minspec:managed:docs-lane-workflow <<<
