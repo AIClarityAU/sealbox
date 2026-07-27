@@ -1,0 +1,121 @@
+# ci — the `lint` and `test` required status checks.
+#
+# `main`'s ruleset requires five contexts: `MinSpec SDD validation`,
+# `ready-to-merge`, `ai-review`, `lint`, and `test`. Until this file existed no
+# workflow emitted the last two, so they could only ever sit pending and every
+# PR needed an `--admin` bypass to land (#25). A required context with no
+# producing workflow is the worst kind of gate: it never fails visibly, it
+# hangs, and the routine bypass becomes the real merge policy — the exact
+# failure the constitution's "no silent gate" invariant forbids.
+#
+# The job ids below are `lint` and `test` verbatim, because the check-run name
+# GitHub matches the required context against is the job name. Renaming either
+# job silently re-opens the hole.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      # Fetched from the release page and checksum-verified rather than run as a
+      # third-party action, so nothing outside actions/* is trusted with the job.
+      # Bumping ACTIONLINT_VERSION requires bumping ACTIONLINT_SHA256 in the same
+      # edit — the tarball is rejected otherwise.
+      - name: Lint workflows (actionlint)
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          set -euo pipefail
+          tarball="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "$tarball" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${tarball}"
+          echo "${ACTIONLINT_SHA256}  ${tarball}" | sha256sum --check --status
+          tar -xzf "$tarball" actionlint
+          # GitHub runners ship shellcheck, so actionlint additionally shellchecks
+          # every `run:` block — which is most of the value here. Advisory
+          # severities are dropped, though: the sole `info` finding on this repo
+          # is SC2016 against `printf '...%s...' "$RUN_URL"` in ai-review.yml,
+          # where single-quoting the format string is not a mistake but the
+          # correct way to write it. Gating on advisory output would make the
+          # only way to green a change that makes the script worse. Anything
+          # rated `warning` or `error` still fails the job (#28).
+          #
+          # Do not begin a comment line in a `run:` block with the word
+          # "shellcheck" as the first token — shellcheck reads `# shellcheck …`
+          # as a directive, not prose, and an unparseable one is SC1072/SC1073
+          # at `error` severity. This comment failed the job that way once.
+          ./actionlint -color -ignore 'shellcheck reported issue in this script: SC[0-9]+:(info|style)'
+
+      # actionlint validates the workflow YAML; this catches syntax errors in the
+      # JavaScript those workflows `require` at run time — where a parse error
+      # would otherwise surface only as a mid-run gate failure.
+      - name: Syntax-check workflow scripts
+        run: |
+          set -euo pipefail
+          mapfile -t sources < <(find .github/scripts scripts -name '*.js' -type f 2>/dev/null | sort)
+          if [ ${#sources[@]} -eq 0 ]; then
+            echo "::error title=No scripts found::Expected at least one .js under .github/scripts/ or scripts/. Finding none means the search path moved, not that everything is clean — failing rather than reporting a green check over zero files."
+            exit 1
+          fi
+          for js in "${sources[@]}"; do
+            echo "node --check $js"
+            node --check "$js"
+          done
+          echo "checked ${#sources[@]} file(s)"
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      # Discovered, not enumerated: a new `*.test.js` is gated the moment it
+      # lands instead of waiting for someone to remember to list it here. The
+      # search covers the same two directories the lint job syntax-checks —
+      # scoping discovery narrower than the lint sweep would silently leave a
+      # future suite under `scripts/` ungated.
+      #
+      # The emptiness check is not defensive padding. `node --test` over a glob
+      # that matches nothing exits 0 having run nothing, and `node --test <dir>`
+      # does not scan the directory at all — it tries to load it as a module.
+      # Bare `node --test` skips dot-directories, so it never sees
+      # `.github/scripts` either. Each of those would report a green `test`
+      # check over zero assertions, which is worse than no gate: it looks like
+      # coverage. Finding no suites means the layout moved, so it fails.
+      - name: Run tests
+        run: |
+          set -euo pipefail
+          mapfile -t suites < <(find .github/scripts scripts -name '*.test.js' -type f 2>/dev/null | sort)
+          if [ ${#suites[@]} -eq 0 ]; then
+            echo "::error title=No test suites found::Expected at least one *.test.js under .github/scripts/ or scripts/. The test gate must not report green over zero suites."
+            exit 1
+          fi
+          echo "discovered ${#suites[@]} suite(s):"
+          printf '  %s\n' "${suites[@]}"
+          node --test "${suites[@]}"
