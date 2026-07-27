@@ -52,7 +52,15 @@ jobs:
             "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${tarball}"
           echo "${ACTIONLINT_SHA256}  ${tarball}" | sha256sum --check --status
           tar -xzf "$tarball" actionlint
-          ./actionlint -color
+          # GitHub runners ship shellcheck, so actionlint additionally shellchecks
+          # every `run:` block — which is most of the value here. Advisory
+          # severities are dropped, though: the sole `info` finding on this repo
+          # is SC2016 against `printf '...%s...' "$RUN_URL"` in ai-review.yml,
+          # where single-quoting the format string is not a mistake but the
+          # correct way to write it. Gating on advisory output would make the
+          # only way to green a change that makes the script worse. Anything
+          # shellcheck rates `warning` or `error` still fails the job (#28).
+          ./actionlint -color -ignore 'shellcheck reported issue in this script: SC[0-9]+:(info|style)'
 
       # actionlint validates the workflow YAML; this catches syntax errors in the
       # JavaScript those workflows `require` at run time — where a parse error
