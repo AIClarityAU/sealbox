@@ -25,7 +25,7 @@ This project uses MinSpec SDD methodology. Specs in `specs/`, decisions in `docs
 - **Agents you can trust because they stop.** The product's differentiator is tier-gated HITL, not "an AI that does everything" — T1–T2 auto-dispatch, T3–T4 wait for human spec/plan approval (EPIC-007 goal, SPEC-002 FR-12).
 - **No container runtime → degrade to Layer-1 manual, never "off".** Losing docker downgrades autonomy, never the trust boundary; the agent still never runs in the extension host (SPEC-002 FR-10).
 - **Never infer "secure" from a dead probe.** Every negative deny-check is paired with a positive control that must succeed — an unreachable canary could mean egress-blocked, curl-missing, or canary-down, never assume the safe reading (SPEC-002 FR-7).
-- **Scope honesty.** Attestation proves "as configured, this box cannot reach X" — a config-correctness gate, not a kernel/container-escape guarantee. State that residual explicitly rather than overclaiming (SPEC-002 FR-8).
+- **Scope honesty.** Attestation proves "as configured, this box cannot reach X" — a config-correctness gate, not a kernel/container-escape guarantee. State that residual explicitly rather than over-claiming (SPEC-002 FR-8).
 
 ## Before Making Changes
 
@@ -33,6 +33,15 @@ This project uses MinSpec SDD methodology. Specs in `specs/`, decisions in `docs
 2. Classify the change by mechanical scope (T1-T4) — how far it reaches, not how hard it feels
 3. Follow the appropriate ceremony level (the predicted tier is a floor — raise it, never lower it)
 4. Never violate the invariants listed above
+
+## Naming waves, phases, and batches
+
+Never refer to a group of work by a bare number.
+
+- **Name what you coin.** A wave, batch, or group you invent gets a descriptive name ("the mechanical-bugfix wave"), never "Wave 1".
+- **Gloss what is predefined.** When an identifier is fixed and numeric (`Phase 2`, `Slice 3`, `T3`), append a short reminder of what it covers the first time it appears in any response, doc, issue, PR, or commit — e.g. "Phase 2 (Public-ready — polish)".
+
+A bare number makes the reader stop and look it up; a two-word gloss costs nothing.
 
 ## Coding Standards
 

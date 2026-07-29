@@ -4,6 +4,7 @@
     "Overview": "2b7240856ab97aeef39eac011acad0cd4f8a97ef70ac947205b38903966811b8",
     "Invariants": "740d3679bb2b7cd614babac2d2622a277777e869795e0c4a8d6130e4fc99d325",
     "SDD Methodology": "bbb968d7be5aebe45495f7e024f292888ef1aad33610f090212e913fa8c93d28",
+    "Naming waves, phases, and batches": "7efd6a55ae0e4f167ffcaee6dcacab392c47da5f3805dea8a1ff0485e1457824",
     "File Locations": "7c8f5347eec33d9917104252890ef5c4912b6997cb7ea689f451095b1b712321",
     "Commands": "87cfdc02e99db3b20b1d0be46de5d5957e0250021fd75d3eb5d0bc3646d6a7f8"
   },
@@ -14,6 +15,7 @@
     "Decision Records": "20f8d8123316df2b507c6b0cab2910d0ca724caf2c2e310187d8be4a5eae20ca",
     "Constitution": "a25420391827752c0c7199059dc2cdb79638c16194f8c32dfd6b834eca97dcc2",
     "Task Classification Guide": "0a7ae8bd304b4844cdd81dcd3e36a2a3c8aeee6c382d246f926d462f89b98972",
+    "Naming waves, phases, and batches": "7efd6a55ae0e4f167ffcaee6dcacab392c47da5f3805dea8a1ff0485e1457824",
     "Rules": "bb5b6cb560170593d8e0fc3fe78a19c9a35ca71f5dabfe7692948e503dac333b",
     "Spec Kit Slash Commands": "142543a35c4b3522c5eeb29aaa1ae1970567c4c1b802bb8e34cb5864b726a0a1"
   },
@@ -21,14 +23,15 @@
     "__preamble__": "db1f45591445a348085532439fe3534401fbf497df8693de0c76533ea6306fc2",
     "Project Context": "c56fd6ffbf458f31f9ac33046835ee6d110d9902fe55678e5b74939276cac59e",
     "Invariants": "a970e22cd451856f1f2709cd5aa8bd393fe28dd44e8dbb933008316571be19d2",
-    "Principles": "fc4cd6b34cec969608896730f198795ef12de80ca23a9870b7a4de30034ef7fc",
+    "Principles": "b817f16d91dc123a860081bd601987f08b705a0afaf2878fc89e881cd9c71037",
     "Before Making Changes": "7b3bdfacb27375a90eb52c71d1de9995e0000fb50da312d1c8b3f17385644bd7",
+    "Naming waves, phases, and batches": "7efd6a55ae0e4f167ffcaee6dcacab392c47da5f3805dea8a1ff0485e1457824",
     "Coding Standards": "89ab084719acfcbe5296dfb31a2f302c2ef49f8f0e3cdbc528e125244af758fb"
   },
   ".minspec/constitution.md": {
     "__preamble__": "138f4e4e939f67dc6c092a21ed1cc5e2b7614e39da11a4940b331874a4781e3e",
     "Invariants": "85132ba883d12e49bc48a9a88c3fcb5c9a056be06f1876d16f7f291faea4228a",
-    "Principles": "8fbbdbd8ee22d7ab806fca85a2083c3f61fbb2fec05d2b0d156b9101c1739d54",
+    "Principles": "51094b522b1eb0c3fc08c129fbb76080c21acef97f20b7afa5cf12676bc65a9b",
     "Constraints": "bac8bc4588d9aa30e081dcc97de4a3c7c804fef657cbfbf451ce8175dfb8d24c",
     "Goals": "c47bf6f04da448a5bcdd88ac5ed89c761033cc3c27f06a27e672839bc5a6f809"
   }
