@@ -1,6 +1,9 @@
 // Unit tests for the ai-review label-integrity decision logic.
 // Runs on plain Node (no deps): `node --test .github/scripts/ai-review-guard.test.js`.
-// Wired into CI's lint job so the security-critical decisions stay enforced.
+// Wired into CI's `test` job (ci.yml, added in #27) so the security-critical
+// decisions stay enforced. That job discovers every *.test.js rather than
+// naming them, and fails when discovery comes up empty, so this suite cannot
+// silently stop running.
 
 'use strict';
 
