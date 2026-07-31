@@ -1,0 +1,8 @@
+{
+  // The only test system in this repo is node:test (`node --test`), which VS Code
+  // has no built-in controller for. Without this extension the Testing panel shows
+  // nothing for the SealBox folder.
+  "recommendations": [
+    "atkeson.nodejs-testing"
+  ]
+}
