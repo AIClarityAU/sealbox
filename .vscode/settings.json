@@ -1,0 +1,13 @@
+{
+    // This repo's only automated test suite is plain `node --test` (node:test):
+    //   .github/scripts/*.test.js   — ai-review label integrity
+    //
+    // VS Code ships no built-in node:test controller, so without the
+    // atkeson.nodejs-testing extension (see extensions.json) the Testing panel is
+    // empty here even though `node --test` passes from a terminal.
+    "nodejs-testing.exclude": [
+        "**/node_modules/**",
+        "**/.venv/**",
+        "**/out/**"
+    ]
+}
