@@ -5,9 +5,24 @@
     // VS Code ships no built-in node:test controller, so without the
     // atkeson.nodejs-testing extension (see extensions.json) the Testing panel is
     // empty here even though `node --test` passes from a terminal.
+    //
+    // ".github" in the include list is the whole reason this repo shows anything at
+    // all. The extension builds its file matcher with picomatch and does not pass
+    // `dot: true`, and picomatch's "**/" will not traverse a leading-dot path
+    // SEGMENT — so under the default include of ["./"] sealbox's one and only suite
+    // is undiscoverable and the panel is silently empty. `include` REPLACES the
+    // default, so "./" must stay listed.
+    //
+    // THESE KEYS ARE INERT WHEN THIS REPO IS OPENED VIA minspecpro.code-workspace:
+    // the extension declares no `scope` on its properties, so VS Code treats them as
+    // WINDOW-scoped and a multi-root FolderConfiguration drops them, and the
+    // extension reads them with no resource argument in any case. They apply when
+    // this repo is opened ALONE. The multi-root copy lives in the .code-workspace
+    // `settings` block; keep the two in step.
+    "nodejs-testing.include": ["./", ".github"],
     "nodejs-testing.exclude": [
-        "**/node_modules/**",
-        "**/.venv/**",
-        "**/out/**"
+        // Restated because setting `exclude` REPLACES the extension's default rather
+        // than merging with it — dropping this would re-admit node_modules.
+        "**/node_modules/**"
     ]
 }
