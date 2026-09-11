@@ -49,6 +49,135 @@ const CHECK_NAME = 'ai-review';
 // isQuotaExhaustion() and the ai-review-retry workflow.
 const BLOCKED = 'ai-review:blocked';
 
+// ── The verdict channel (DR-079, #1157/#1165) ────────────────────────────────
+//
+// The verdict used to be TEXT the reviewer typed, parsed back out of its prose.
+// That made every token the pipeline keys on a token an honest reviewer might
+// legitimately write — and a review of THIS file writes all of them. Eight
+// consumers could be flipped by a bare mention, and `BEGIN_COUNT != 1` caught
+// ambiguity but never forgery: a lone injected block decided `pass`.
+//
+// Now the verdict is a VALUE the reviewer returns (`claude -p --json-schema` →
+// `.structured_output`), and the block below is rendered by the PARENT from
+// validated fields. Two properties follow, and they are the whole point:
+//   • exactly one block exists, because we write it — the count guard can no
+//     longer be tripped by prose;
+//   • a quoted marker arrives as a JSON string VALUE, and a value cannot become
+//     structure.
+//
+// No `maxLength`, `maxItems` or `format` here, deliberately: a cap that makes the
+// model fail to produce `structured_output` would recreate #1157 as an
+// intermittent self-block correlated with THOROUGH reviews — the worst possible
+// correlation. Length is bounded at render time, where it can shorten display
+// text but can never withhold a verdict.
+const VERDICT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['verdict', 'blocking', 'summary'],
+  properties: {
+    verdict: { type: 'string', enum: ['pass', 'changes'] },
+    blocking: { type: 'integer', minimum: 0 },
+    summary: { type: 'string' },
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['severity', 'location', 'problem'],
+        properties: {
+          severity: { type: 'string' },
+          location: { type: 'string' },
+          problem: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+
+// Neutralise every protocol token inside model-authored TEXT before it is
+// rendered between real delimiters. Without this the fix would be cosmetic: a
+// summary containing `REVIEW_VERDICT_BEGIN` would mint a second marker in the
+// block we just wrote, reproducing #1157 through the new channel. Mirrors the
+// diff-defanging in review-branch.sh, and leaves a visible marker so a reader
+// can still see that the text was there.
+function defangProtocolTokens(text) {
+  return String(text == null ? '' : text)
+    .replace(/\r/g, '')
+    // The replacement must NOT contain the token it replaces. review-decide.sh:41
+    // matches REVIEW_UNAVAILABLE as a BARE SUBSTRING, so a marker like
+    // "[defanged: REVIEW_UNAVAILABLE]" would still trip it — the defang would look
+    // applied and change nothing. Hyphens keep the text readable while breaking the
+    // literal the consumers grep for.
+    .replace(/REVIEW_VERDICT_(BEGIN|END)/g, (_m, k) => `[defanged marker: REVIEW-VERDICT-${k}]`)
+    .replace(
+      /REVIEW_UNAVAILABLE(_BEGIN|_END)?/g,
+      (_m, k) => `[defanged marker: REVIEW-UNAVAILABLE${k ? k.replace('_', '-') : ''}]`,
+    )
+    // Only the line-anchored form is load-bearing downstream (review-decide.sh
+    // greps `^[[:space:]]*ESCALATE:`), so neutralise it there and leave prose
+    // mentions mid-sentence readable.
+    .replace(/^(\s*)ESCALATE:/gm, '$1[defanged: ESCALATE]:');
+}
+
+// Bound a single rendered line. Applied to DISPLAY text only — never to the
+// verdict or blocking fields, so truncation can never change a decision.
+const MAX_FIELD = 500;
+function clampField(text) {
+  const s = defangProtocolTokens(text).replace(/\n+/g, ' ').trim();
+  return s.length <= MAX_FIELD ? s : `${s.slice(0, MAX_FIELD - 1)}…`;
+}
+
+/**
+ * Render the ONE canonical verdict block from a validated structured object.
+ * Returns '' for anything unusable, which downstream reads as "no verdict" and
+ * fails closed to ai-review:changes — never a spurious pass.
+ */
+function renderVerdictBlock(structured) {
+  const o = structured;
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return '';
+  const verdict = String(o.verdict ?? '').trim().toLowerCase();
+  if (verdict !== 'pass' && verdict !== 'changes') return '';
+  if (!Number.isInteger(o.blocking) || o.blocking < 0) return '';
+
+  const lines = [
+    'REVIEW_VERDICT_BEGIN',
+    `verdict: ${verdict}`,
+    `blocking: ${o.blocking}`,
+    `summary: ${clampField(o.summary) || '(no summary provided)'}`,
+  ];
+  const findings = Array.isArray(o.findings) ? o.findings : [];
+  if (findings.length > 0) {
+    lines.push('findings:');
+    for (const f of findings) {
+      if (!f || typeof f !== 'object') continue;
+      const sev = clampField(f.severity) || 'note';
+      const loc = clampField(f.location) || '(unspecified)';
+      const prob = clampField(f.problem) || '(no detail)';
+      lines.push(`- ${sev} ${loc} — ${prob}`);
+    }
+  }
+  lines.push('REVIEW_VERDICT_END');
+  return `${lines.join('\n')}\n`;
+}
+
+/**
+ * Extract the verdict block from `claude -p --output-format json` stdout.
+ * Fails closed ('') on anything unexpected: non-JSON, an error result, or a
+ * missing/!object `structured_output`. The agent cannot reach this function's
+ * input except through the schema-validated channel.
+ */
+function parseCliVerdict(stdoutText) {
+  let env;
+  try {
+    env = JSON.parse(String(stdoutText == null ? '' : stdoutText));
+  } catch {
+    return '';
+  }
+  if (!env || typeof env !== 'object') return '';
+  if (env.is_error === true) return '';
+  return renderVerdictBlock(env.structured_output);
+}
+
 // DR-063 (materialised as SPEC-031 INV-8 / FR-9a) — the single positive "your turn"
 // queue signal. Present
 // on a PR whose independent AI review has PASSED (the `ready-to-merge` gate is
@@ -57,6 +186,46 @@ const BLOCKED = 'ai-review:blocked';
 // negative label — and it never coexists with `ai-review:changes` (a failing gate
 // removes it). Owned by ONE applier (ready-to-merge.yml), driven by shouldAwaitApproval().
 const AWAITING_APPROVAL = 'awaiting-approval';
+
+// #1247 — the NEGATIVE counterpart to AWAITING_APPROVAL: this PR declares a
+// dependency on something that is still open, so it is nobody's turn yet.
+//
+// Deliberately NOT named `blocked`: `ai-review:blocked` above already means
+// something entirely different (the reviewer could not RUN, a transient quota
+// condition). Two labels a human scans in the same list must not read as
+// variants of one another when they mean unrelated things.
+const BLOCKED_BY = 'blocked-by';
+
+// Declarations of a blocking dependency in a PR body, e.g.
+//
+//   Blocked by #1225
+//   Blocked by: #1225, #1179
+//   - **Blocked by** #1225
+//
+// STRICT BY DESIGN. The pattern anchors to the start of a line (after optional
+// markdown decoration) so ordinary prose — "this was blocked by a stale cache",
+// "#1225 blocked by design" — can never mint the label. A false `blocked-by`
+// parks a mergeable PR indefinitely, which is worse than not having the signal:
+// the whole point is that the queue tells the truth.
+//
+// Only `Blocked by` is recognised, NOT `Depends on`. PR bodies say "depends on"
+// loosely all the time ("depends on the seam landing first" as narrative), while
+// "Blocked by" reads as a declaration in every corpus I checked. One unambiguous
+// form beats two fuzzy ones — a second form can be added if a real body wants it.
+const BLOCKED_BY_LINE_RE = /^[\s>*_-]*\**\s*blocked\s+by\b\**\s*:?\s*(.+)$/gim;
+
+// Only the LEADING run of refs on a declaring line counts: `#N`, separated by
+// commas/`and`/whitespace. Scanning stops at the first token that is not one of
+// those, so a trailing explanation cannot smuggle in a second blocker.
+//
+// Found by using it: the first real declaration written against this parser read
+//   Blocked by #1225 — … (DR-078, merged as `proposed` in #1246, awaiting Accept)
+// and a whole-line scan returned [1225, 1246]. #1246 was already closed so nothing
+// broke, but the declaration was wrong, and a closed ref today is an open one
+// tomorrow. An explanation after the refs is the natural way to write this, so the
+// grammar has to expect it rather than the author having to remember.
+const BLOCKED_BY_REFS_RE = /^(?:\s*(?:,|and\b)?\s*#\d+)+/i;
+const ISSUE_REF_RE = /#(\d+)\b/g;
 
 // Detect, from a failed `claude -p` reviewer invocation's combined output, whether
 // the cause is an exhausted subscription quota / rate-limit / overload (a transient,
@@ -75,6 +244,211 @@ function isQuotaExhaustion(text) {
     // Claude CLI's subscription-limit phrasing: "Claude AI usage limit reached",
     // "5-hour limit reached", "You've reached your usage limit", "weekly limit".
     || /usage limit reached|limit reached|reached your (usage )?limit|weekly limit|session limit|5-?hour limit/i.test(s);
+}
+
+// STRICT variant for text that may be the AGENT's own prose rather than the harness's
+// diagnostics (#1131). The loose predicate above matches a bare `quota` anywhere, which
+// is correct for the CLI's stderr — that text is the harness talking — but wrong for
+// anything the model wrote: a review that DISCUSSES quota handling is not evidence of a
+// quota outage, and reading it as one loops a genuine crash forever as retry-able
+// `blocked` instead of failing closed to a human.
+//
+// So this keeps only phrasings that read as the CLI's own SENTENCES and drops every
+// bare topic word a reviewer would naturally use while describing the code — `quota`,
+// `overloaded`, `insufficient credit`, and also `rate limit`, which is exactly what a
+// review of the rate-limit handling says.
+//
+// Honest limit: classifying model-authored prose by content is unreliable in principle,
+// and this narrows the failure rather than eliminating it. It is acceptable because it
+// is a LAST-RESORT path — reached only when the CLI failed while writing nothing at all
+// to stderr — and because the residual error now falls toward failing closed to a human
+// rather than looping forever as retry-able.
+function isQuotaExhaustionStrict(text) {
+  const s = String(text == null ? '' : text);
+  return /usage limit reached|limit reached|reached your (usage )?limit|weekly limit|session limit|5-?hour limit/i.test(s)
+    || /\b(too many requests|429)\b/i.test(s)
+    || /\bresets? (at|in)\b/i.test(s);
+}
+
+// ─── Reset-instant extraction (#1204) ───────────────────────────────────────
+//
+// The quota detectors above only ask WHETHER the text looks like a quota block.
+// The reset time the CLI states — "resets 8:40am (UTC)", "resets 12:50am
+// (Australia/Sydney)" — was matched as a pattern and then thrown away, so the
+// retry had nothing to schedule against and polled blindly. On PR #1602 that cost
+// six attempts across 4h21m, five of which were futile at the moment they fired.
+//
+// Returns an ISO-8601 instant (string) or null. Null means "no reset time stated",
+// which callers MUST treat as "retry on the normal cadence" — never as "never
+// retry". Failing to parse must not strand a PR.
+//
+// `nowMs` is injected rather than read from the clock so this is a pure function
+// and its tests are deterministic across DST boundaries.
+
+/** Offset (ms) of `tz` from UTC at the instant `utcMs`. */
+function tzOffsetMs(utcMs, tz) {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  const p = {};
+  for (const part of dtf.formatToParts(new Date(utcMs))) p[part.type] = part.value;
+  const asIfUtc = Date.UTC(+p.year, +p.month - 1, +p.day, (+p.hour) % 24, +p.minute, +p.second);
+  return asIfUtc - utcMs;
+}
+
+/** Wall-clock y/m/d h:m in `tz` → UTC ms. Iterated twice to settle DST shifts. */
+function zonedWallClockToUtc(y, mo, d, h, mi, tz) {
+  let utc = Date.UTC(y, mo - 1, d, h, mi);
+  for (let i = 0; i < 2; i++) utc = Date.UTC(y, mo - 1, d, h, mi) - tzOffsetMs(utc, tz);
+  return utc;
+}
+
+/** The y/m/d currently showing in `tz` at instant `utcMs`. */
+function calendarDateIn(utcMs, tz) {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+  });
+  const p = {};
+  for (const part of dtf.formatToParts(new Date(utcMs))) p[part.type] = part.value;
+  return { y: +p.year, mo: +p.month, d: +p.day };
+}
+
+function parseResetInstant(text, nowMs) {
+  const s = String(text == null ? '' : text);
+  if (!Number.isFinite(nowMs)) return null;
+
+  // Relative first — "resets in 25 minutes", "try again in 2 hours". Unambiguous,
+  // and needs no timezone reasoning at all.
+  const rel = s.match(/\b(?:resets?|try again)\s+in\s+(\d{1,3})\s*(second|minute|min|hour|hr)s?\b/i);
+  if (rel) {
+    const n = +rel[1];
+    const unit = rel[2].toLowerCase();
+    const mult = unit.startsWith('sec') ? 1e3 : unit.startsWith('h') ? 3.6e6 : 6e4;
+    return new Date(nowMs + n * mult).toISOString();
+  }
+
+  // Absolute wall-clock — "resets 8:40am (UTC)", "resets at 12:50 am (Australia/Sydney)".
+  // The zone is optional; without one there is no defensible instant, so we bail
+  // rather than guess the runner's local zone (which is UTC on Actions but not
+  // necessarily where the quota window is anchored).
+  const abs = s.match(
+    /\bresets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:\(([A-Za-z_]+(?:\/[A-Za-z_+-]+)*)\))?/i,
+  );
+  if (!abs) return null;
+  const tz = abs[4];
+  if (!tz) return null;
+
+  let h = +abs[1];
+  const mi = abs[2] == null ? 0 : +abs[2];
+  const mer = abs[3] ? abs[3].toLowerCase() : null;
+  if (h > 23 || mi > 59) return null;
+  if (mer === 'pm' && h < 12) h += 12;
+  if (mer === 'am' && h === 12) h = 0;
+
+  let cand;
+  try {
+    const today = calendarDateIn(nowMs, tz);
+    cand = zonedWallClockToUtc(today.y, today.mo, today.d, h, mi, tz);
+    // A stated reset is always in the FUTURE — "resets 12:50am" seen at 20:32 means
+    // tomorrow's 12:50am, not one that already passed sixteen hours ago.
+    if (cand <= nowMs) {
+      const t = calendarDateIn(nowMs + 864e5, tz);
+      cand = zonedWallClockToUtc(t.y, t.mo, t.d, h, mi, tz);
+    }
+  } catch {
+    return null; // unknown/invalid IANA zone — treat as "not stated"
+  }
+  if (!Number.isFinite(cand)) return null;
+  return new Date(cand).toISOString();
+}
+
+// ─── Patch-fingerprint re-attestation (#1728) ────────────────────────────────
+//
+// WHAT IS LIVE TODAY: recording only. The ai-review workflow embeds a
+// `patch-fingerprint:` marker in the verdict check-run's output. NOTHING reads that
+// marker back to skip a review. `findReattestableVerdict` below is implemented,
+// tested and exported, but has no production caller, and the gate that consumes
+// witnesses (`ready-to-merge.yml` → verifyHeadPassWitness / verifyHeadPassCheckRun)
+// is unchanged — so every branch update still re-runs the full four-voter panel.
+// Wiring the consumer is #1840. Recording lands first by necessity: a marker can
+// only be consumed on PRs old enough to already carry one.
+//
+// WHY THE MARKER IS RECORDED. Under `strict` branch protection every merge puts every
+// other open PR BEHIND, and the branch update re-triggers a full four-voter review —
+// of a patch that did not change. The reviewer reads the THREE-DOT patch
+// (`base...head`), and a forward-merge leaves that patch byte-identical, so the
+// previous verdict is still a true statement about exactly this content.
+//
+// WHAT THE CONSUMER MUST NOT DO, when it is built: reuse an old witness. The
+// SHA-binding in verifyHeadPassCheckRun (#466/#810) is load-bearing — a witness must
+// correspond to the CURRENT head. A re-attestation is therefore to post a FRESH
+// check-run on the new SHA, carrying the same verdict and the same fingerprint. The
+// claim changes from "four voters reviewed this SHA" to "four voters reviewed this
+// patch, and this SHA has that patch" — still true, and stated rather than implied.
+//
+// HONEST LIMIT, and the reason the consumer is to be opt-in: an identical patch can
+// produce a DIFFERENT merge result, because the base moved. That is the #1394
+// semantic-conflict class. `strict` narrows it (the branch must be current) but does
+// not remove it, so re-attestation trades back a little of what `strict` buys.
+
+const PATCH_FINGERPRINT_PREFIX = 'patch-fingerprint:';
+
+/**
+ * Stable fingerprint of a three-dot patch. Normalises line endings, and strips the
+ * whitespace run at the very END of the patch — the whole string, no `/m` flag, so
+ * interior lines keep their own trailing whitespace — meaning a cosmetic re-render
+ * that differs only in a final newline is not read as a new patch. Nothing else is
+ * normalised: any real content change must produce a different digest.
+ */
+function patchFingerprint(diffText) {
+  const norm = String(diffText == null ? '' : diffText).replace(/\r\n?/g, '\n').replace(/\s+$/, '');
+  if (norm === '') return null; // an empty patch is never re-attestable (see #1680)
+  return require('crypto').createHash('sha256').update(norm, 'utf8').digest('hex');
+}
+
+/** Render the marker embedded in a check-run's output so a later run can read it. */
+function renderPatchFingerprint(fp) {
+  return fp ? `${PATCH_FINGERPRINT_PREFIX}${fp}` : '';
+}
+
+/** Read the fingerprint back out of a check-run's output text. */
+function parsePatchFingerprint(text) {
+  const m = String(text == null ? '' : text).match(/patch-fingerprint:([0-9a-f]{64})\b/);
+  return m ? m[1] : null;
+}
+
+/**
+ * Is there a prior, provenance-verified PASS for this exact patch?
+ *
+ * Deliberately reuses the SAME strictness as verifyHeadPassCheckRun — completed +
+ * success + an allowlisted App slug — because a weaker check here would be a second,
+ * softer door into the same gate. The only thing it does NOT require is head_sha
+ * equality, which is precisely what makes it a re-attestation rather than a witness.
+ */
+function findReattestableVerdict({ checkRuns, patchHash, allowlist } = {}) {
+  if (!patchHash) return { ok: false, reason: 'no patch fingerprint (empty or unreadable diff)' };
+  if (!Array.isArray(checkRuns) || checkRuns.length === 0) {
+    return { ok: false, reason: 'no prior check-runs to re-attest from' };
+  }
+  const allowed = Array.isArray(allowlist) ? allowlist : [];
+  if (allowed.length === 0) return { ok: false, reason: 'empty reviewer allowlist — refusing to re-attest' };
+
+  for (const c of checkRuns) {
+    if (!c || c.name !== CHECK_NAME) continue;
+    if (c.status !== 'completed' || c.conclusion !== 'success') continue;
+    const slug = c.app && c.app.slug;
+    const identities = [slug, slug ? `${slug}[bot]` : null].filter(Boolean);
+    if (!identities.some((i) => allowed.includes(i))) continue;
+    const text = [c.output && c.output.title, c.output && c.output.summary, c.output && c.output.text]
+      .filter(Boolean)
+      .join('\n');
+    if (parsePatchFingerprint(text) === patchHash) {
+      return { ok: true, sourceSha: c.head_sha, reason: `patch unchanged since ${String(c.head_sha).slice(0, 8)}` };
+    }
+  }
+  return { ok: false, reason: 'no prior passing review of this exact patch' };
 }
 
 // GitHub truncates commit-status descriptions at 140 chars; keep ours within it
@@ -423,8 +797,56 @@ function decideStatus({ labels, provenanceRevert, stalenessStrip, passProvenance
 //   - !autoMergeArmed — the PR will NOT merge itself. A PR with native auto-merge
 //     armed (DR-061) merges the instant the gate greens, so it is the ROBOT's turn,
 //     never a human's — it must never enter the "my turn" queue.
-function shouldAwaitApproval({ statusState, autoMergeArmed } = {}) {
+//   - openBlockers is empty — nothing this PR declared `Blocked by` is still open.
+//     A PR waiting on another PR/issue is not a human's turn: pressing merge would
+//     land it out of order. #1224 is the case that prompted this (#1247): it read
+//     `ai-review:pass` + `awaiting-approval` while genuinely blocked on #1225, so
+//     the "my turn" queue was lying about a PR nobody could act on.
+//   - !isDraft — a draft cannot be merged at all, so it can never be a human's turn
+//     to merge it. Previously drafts entered the queue purely because the gate was
+//     green, which is how #1224 showed up there twice over.
+//
+// Both new conditions fail toward NOT-your-turn. That is the correct direction for
+// a positive signal: a missing "your turn" costs a glance at the queue, a false one
+// costs a merge nobody should have made.
+function shouldAwaitApproval({ statusState, autoMergeArmed, openBlockers, isDraft } = {}) {
+  if (isDraft) return false;
+  if (Array.isArray(openBlockers) && openBlockers.length > 0) return false;
   return statusState === 'success' && !autoMergeArmed;
+}
+
+// #1247 — extract every declared blocking dependency from a PR body. Pure:
+// text in → sorted, de-duplicated array of issue/PR NUMBERS out. Empty array for
+// null/undefined/no-declaration, so callers need no special-casing.
+//
+// Returns numbers (not `#N` strings) because the caller's next move is an API
+// lookup keyed by number; formatting back to `#N` is a display concern.
+function parseBlockedBy(body) {
+  const text = String(body == null ? '' : body);
+  const found = new Set();
+  BLOCKED_BY_LINE_RE.lastIndex = 0;
+  let line;
+  while ((line = BLOCKED_BY_LINE_RE.exec(text)) !== null) {
+    // Only the remainder of the declaring line is scanned for refs, so a `#N`
+    // three paragraphs later is never swept into an unrelated declaration — and
+    // only its LEADING ref run, so a trailing explanation on the same line
+    // cannot either.
+    const refRun = BLOCKED_BY_REFS_RE.exec(line[1]);
+    if (!refRun) continue;
+    const rest = refRun[0];
+    ISSUE_REF_RE.lastIndex = 0;
+    let ref;
+    while ((ref = ISSUE_REF_RE.exec(rest)) !== null) found.add(Number(ref[1]));
+  }
+  return [...found].sort((a, b) => a - b);
+}
+
+// #1247 — should the `blocked-by` label be PRESENT? True iff at least one declared
+// blocker is still open. Pure, and the exact complement of the openBlockers arm of
+// shouldAwaitApproval, so the two labels can never both be present: one function
+// decides, the applier mirrors it.
+function shouldMarkBlockedBy({ openBlockers } = {}) {
+  return Array.isArray(openBlockers) && openBlockers.length > 0;
 }
 
 // Map the reviewer's FINAL verdict label — plus whether the PR touches the
@@ -580,6 +1002,67 @@ function isBenignRemovalError(status) {
   return status === 404;
 }
 
+/** Every label this workflow uses to assert a verdict. Exactly one may survive. */
+const PENDING = 'ai-review:pending';
+const VERDICT_LABELS = [PASS, CHANGES, BLOCKED, PENDING];
+
+/**
+ * Which verdict labels must go, and what the PR must look like afterwards (#1468).
+ *
+ * WIRED — ai-review.yml's Post-verdict step calls this to decide its removals, inside
+ * the `verdict-label-coherence` block (#1468 step 2).
+ *
+ * That step used to add the new label and best-effort-remove the others, discarding
+ * both the error and the result. When one removal silently failed, the PR carried
+ * `ai-review:pass` AND `ai-review:changes` at once, and `ready-to-merge` read the
+ * contradiction as "not passed" — a legitimately-passing PR that could never merge,
+ * with nothing on its surface explaining why. Observed on #1430.
+ *
+ * Pure so the rule is testable without a live PR: the caller does the I/O and then
+ * checks its own post-state against `expected`.
+ *
+ * @param {{current?: string[], verdict: string}} o - `current` = labels on the PR now.
+ * @returns {{expected: string[], remove: string[], add: string[]}}
+ *   `expected` is the FULL verdict-label set that must be present when done — always
+ *   exactly the one verdict. Non-verdict labels (docs-lane, needs-human-review, …) are
+ *   never touched and never appear here.
+ */
+function decideVerdictLabels({ current = [], verdict } = {}) {
+  if (!VERDICT_LABELS.includes(verdict)) {
+    throw new Error(`decideVerdictLabels: unknown verdict "${verdict}"`);
+  }
+  const present = new Set(current.filter((l) => VERDICT_LABELS.includes(l)));
+  return {
+    expected: [verdict],
+    remove: VERDICT_LABELS.filter((l) => l !== verdict && present.has(l)),
+    add: present.has(verdict) ? [] : [verdict],
+  };
+}
+
+/**
+ * Did the post-state land? Returns null when correct, else a human-readable fault.
+ *
+ * WIRED — ai-review.yml's Post-verdict step re-reads the PR's labels after
+ * reconciling them and fails the step when this returns non-null, so a contradictory
+ * post-state is loud instead of a silent merge wedge (#1468 step 2). The returned
+ * string is surfaced verbatim in the `::error` annotation, which is why it names the
+ * labels it actually saw.
+ *
+ * The two-step split was forced: ai-review.yml loads control scripts from the TRUSTED
+ * BASE, so a workflow calling this before it was on main died with
+ * `TypeError: g.verdictLabelFault is not a function` (observed on #1472's first
+ * attempt). Seam first, caller second.
+ */
+function verdictLabelFault({ current = [], verdict } = {}) {
+  const got = current.filter((l) => VERDICT_LABELS.includes(l)).sort();
+  if (got.length === 1 && got[0] === verdict) return null;
+  if (got.length === 0) return `no verdict label present; expected exactly [${verdict}]`;
+  if (got.length > 1) {
+    return `contradictory verdict labels [${got.join(', ')}]; expected exactly [${verdict}]`;
+  }
+  return `verdict label is [${got[0]}]; expected exactly [${verdict}]`;
+}
+
 // Defensive: GitHub logins are [A-Za-z0-9-] (apps add a `[bot]` suffix), so they
 // can never contain markdown/backtick metacharacters — but strip backticks anyway
 // so a malformed value can never break out of the code span in an audit comment.
@@ -592,9 +1075,23 @@ module.exports = {
   CHANGES,
   BLOCKED,
   AWAITING_APPROVAL,
+  BLOCKED_BY,
   shouldAwaitApproval,
+  parseBlockedBy,
+  shouldMarkBlockedBy,
   shouldSummonHumanReview,
   isQuotaExhaustion,
+  isQuotaExhaustionStrict,
+  patchFingerprint,
+  renderPatchFingerprint,
+  parsePatchFingerprint,
+  findReattestableVerdict,
+  PATCH_FINGERPRINT_PREFIX,
+  parseResetInstant,
+  VERDICT_SCHEMA,
+  defangProtocolTokens,
+  renderVerdictBlock,
+  parseCliVerdict,
   parseAllowlist,
   isAuthorizedReviewer,
   decideProvenanceRevert,
@@ -609,5 +1106,9 @@ module.exports = {
   decideReviewCheck,
   isBenignRemovalError,
   sanitizeLogin,
+  PENDING,
+  VERDICT_LABELS,
+  decideVerdictLabels,
+  verdictLabelFault,
 };
 // <<< minspec:managed:ai-review-guard <<<

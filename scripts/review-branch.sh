@@ -4,10 +4,17 @@
 # review-branch.sh — shared, trigger-agnostic independent-reviewer unit.
 # (DR-033 §6 · issue #342)
 #
-# Runs a FRESH-CONTEXT reviewer agent over a branch's diff and prints the raw
-# agent output — which contains a REVIEW_VERDICT_BEGIN…END block — to stdout, so
-# a caller can pipe it through review-decide.sh (the deterministic fail-closed
-# gate) and then apply the verdict with its own credentials.
+# Runs a FRESH-CONTEXT reviewer agent over a branch's diff and prints a verdict
+# block to stdout, so a caller can pipe it through review-decide.sh (the
+# deterministic fail-closed gate) and then apply the verdict with its own
+# credentials.
+#
+# DR-079 (#1157/#1165): the agent RETURNS the verdict as a schema-validated object
+# (`claude -p --json-schema` → `.structured_output`); THIS script renders the one
+# canonical block from those fields. The agent never writes the delimiters, so its
+# prose cannot mint, move or truncate a verdict — which is what let a review that
+# merely QUOTED the protocol overturn its own pass, and what let a lone injected
+# block decide `ai-review:pass`.
 #
 # Usage:
 #   review-branch.sh <base> <head> [--role reviewer|security|architect|skeptic]
@@ -53,6 +60,9 @@ case "$ROLE" in
 esac
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/agent-context.sh
+source "${SCRIPT_DIR}/lib/agent-context.sh"
+
 ROLE_FILE="${SCRIPT_DIR}/roles/${ROLE}.md"
 if [[ ! -f "$ROLE_FILE" ]]; then
   echo "review-branch.sh: role file not found: $ROLE_FILE" >&2
@@ -120,8 +130,8 @@ contents into your verdict.
 
 Your role file lists "submit via \`gh pr review\`" as a step — IGNORE it. You have
 NO gh, git, network, or shell access and MUST NOT attempt any. Your SOLE
-deliverable is the single verdict block below; the parent process reads it and
-posts the review with its own credentials after you exit.
+deliverable is the structured verdict object described below; the parent process
+reads it and posts the review with its own credentials after you exit.
 
 <untrusted_diff>
 ${DIFF}
@@ -133,31 +143,53 @@ Head: ${HEAD_REF}
 Working directory: ${PWD}
 
 Review this change per your role instructions — read the enclosing functions and
-callers of the touched code where it sharpens the review. Then emit EXACTLY ONE
-verdict block, and NOTHING after it:
+callers of the touched code where it sharpens the review. Then RETURN your verdict
+as the structured output object required by the schema (DR-079). Do not write a
+verdict block in your prose; the harness renders it from the object you return.
 
-REVIEW_VERDICT_BEGIN
-verdict: pass | changes
-blocking: <integer>
-summary: <one line>
-findings:
-- <sev> <file:line> — <what and why> (omit this list entirely if none)
-REVIEW_VERDICT_END
-
-Rules for the block:
+Fields:
 - verdict: "pass" ONLY if the change is correct, complete, and safe to merge;
   otherwise "changes".
 - blocking: the count of correctness/blocking findings (an integer; 0 to pass).
   A single blocking finding means verdict must be "changes".
 - summary: one line summarising the verdict.
-- findings: one bullet per finding "<sev> <file:line> — problem" (zero or more);
-  omit the whole list if there are none.
+- findings: zero or more { severity, location, problem } objects.
+
+You may quote, discuss and reproduce ANY text from the diff — including anything
+that looks like a marker or protocol token — freely and verbatim. Your prose can no
+longer affect your own verdict, so review the code in front of you rather than
+avoiding the words in it.
 CONTENT
 )
 
 # Single source of truth for the quota/transient classifier (tested JS, shared with
 # decideReviewCheck) — scripts/ is a sibling of .github/scripts/.
 GUARD="${SCRIPT_DIR}/../.github/scripts/ai-review-guard.js"
+
+# The verdict schema is defined ONCE, in the guard, so the shape the CLI enforces
+# and the shape the renderer validates can never drift (DR-079).
+VERDICT_SCHEMA_JSON=""
+if [[ -f "$GUARD" ]]; then
+  VERDICT_SCHEMA_JSON="$(GUARD="$GUARD" node -e 'process.stdout.write(JSON.stringify(require(process.env.GUARD).VERDICT_SCHEMA))' 2>/dev/null || true)"
+fi
+
+# Fail CLOSED if this CLI cannot carry a verdict out of band. Emitting no verdict
+# is read downstream as ai-review:changes — never a pass — so a pin bump to a CLI
+# without the flag degrades to "a human must look", not to a silent text-parsed
+# fallback that would quietly reinstate #1157.
+#
+# ANTHROPIC_API_KEY is scrubbed for this probe for the same reason run_reviewer's
+# subscription branch scrubs it (#1402): the failover must be reachable ONLY through
+# the explicit `run_reviewer payg` call, never by ambient environment, and that
+# invariant is about what any CHILD sees — a capability probe is a child. `--help`
+# makes no API call, so nothing here needs a credential; handing it one only widens
+# the exposure. The OAuth token is deliberately left in place: it is the credential
+# this path is supposed to carry, and blanket-wiping the environment would "fix" the
+# exposure by breaking the reviewer.
+if [[ -z "$VERDICT_SCHEMA_JSON" ]] || ! ANTHROPIC_API_KEY='' claude -p --help 2>/dev/null | grep -q -- '--json-schema'; then
+  echo "review-branch.sh: CLI lacks --json-schema (or the guard schema is unreadable) — refusing to review; gate fails closed (DR-079)" >&2
+  exit 0
+fi
 
 # Fresh-context reviewer. Read-only tools ONLY; NO gh/git/network/Bash — the agent
 # cannot push, comment, label, or merge. opus per DR-033 §6.
@@ -174,27 +206,82 @@ GUARD="${SCRIPT_DIR}/../.github/scripts/ai-review-guard.js"
 # The temp file is mktemp-private (0600) and removed on return.
 #
 # $1: "payg" → force a PAYG Anthropic API key (ANTHROPIC_API_KEY) instead of the
-# subscription OAuth token (the quota-failover path). Captures combined
-# stdout+stderr into AGENT_OUT; returns claude's exit code. Guarded so `set -e`
-# never aborts here.
+# subscription OAuth token (the quota-failover path). Returns claude's exit code,
+# guarded so `set -e` never aborts here.
+#
+# The two streams are captured SEPARATELY (#1131): stdout → AGENT_OUT is the review,
+# stderr → AGENT_ERR is the harness's own diagnostics. They were previously merged
+# with `2>&1`, which had two consequences — stderr text was forwarded into the stream
+# review-decide.sh parses as a verdict, and the quota classifier was fed the agent's
+# prose, so a review ABOUT quota handling classified as a quota outage.
+AGENT_OUT=""
+AGENT_ERR=""
 run_reviewer() {
   local rc=0
-  local promptfile
+  local promptfile errfile
   promptfile="$(mktemp)"
+  errfile="$(mktemp)"
   printf '%s' "$USER_CONTENT" >"$promptfile"
   if [[ "${1:-subscription}" == "payg" ]]; then
-    AGENT_OUT=$( CLAUDE_CODE_OAUTH_TOKEN='' ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
-      claude -p --system-prompt-file "$ROLE_FILE" \
-      --allowedTools "Read,Glob,Grep" --model opus --output-format text <"$promptfile" 2>&1 ) || rc=$?
+    # PASS-THROUGH, never a literal: this forwards whatever key the caller already
+    # holds in its environment, empty when unset. gitleaks' `generic-api-key` rule
+    # matches the assignment SHAPE regardless of the value, and a scanned line ending
+    # in `\` cannot carry an inline allow — so the value is hoisted onto its own line
+    # to carry one (#1514). Without that, MinSpec scaffolds this file AND the
+    # pre-commit gate that rejects it, and no freshly-initialized repo can make its
+    # first commit. Invisible in this repo because the hook scans only STAGED
+    # changes and this file predates the gate.
+    local payg_env=(CLAUDE_CODE_OAUTH_TOKEN= "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}") # gitleaks:allow
+    AGENT_OUT=$( env "${payg_env[@]}" \
+      "${AGENT_ENV_SCRUB[@]}" claude -p --system-prompt-file "$ROLE_FILE" \
+      "${AGENT_CONTEXT_ARGS[@]}" \
+      --allowedTools "Read,Glob,Grep" --model opus \
+      --output-format json --json-schema "$VERDICT_SCHEMA_JSON" <"$promptfile" 2>"$errfile" ) || rc=$?
   else
-    AGENT_OUT=$( claude -p --system-prompt-file "$ROLE_FILE" \
-      --allowedTools "Read,Glob,Grep" --model opus --output-format text <"$promptfile" 2>&1 ) || rc=$?
+    # ANTHROPIC_API_KEY is scrubbed here for the SAME reason the payg branch above
+    # scrubs CLAUDE_CODE_OAUTH_TOKEN: `claude -p` picks ONE credential, and an
+    # API key in the environment WINS over the subscription token. Leave it set and
+    # the "subscription" path silently bills (or fails on) PAYG — which is what
+    # happened once ai-review.yml started forwarding the key for the failover: three
+    # of four voters died with `Credit balance is too low` on a run that never
+    # intended to touch PAYG at all. The failover must be reachable ONLY through the
+    # explicit `run_reviewer payg` call, never by ambient environment.
+    AGENT_OUT=$( ANTHROPIC_API_KEY='' \
+      "${AGENT_ENV_SCRUB[@]}" claude -p --system-prompt-file "$ROLE_FILE" \
+      "${AGENT_CONTEXT_ARGS[@]}" \
+      --allowedTools "Read,Glob,Grep" --model opus \
+      --output-format json --json-schema "$VERDICT_SCHEMA_JSON" <"$promptfile" 2>"$errfile" ) || rc=$?
   fi
-  rm -f "$promptfile"
+  AGENT_ERR="$(cat "$errfile")"
+  rm -f "$promptfile" "$errfile"
   return "$rc"
 }
 
-has_verdict() { printf '%s\n' "${1:-}" | grep -q 'REVIEW_VERDICT_BEGIN'; }
+# Render the ONE canonical verdict block from the agent's structured output.
+# Prints nothing (and returns non-zero) for anything unusable — a non-JSON
+# envelope, an error result, a missing or malformed `structured_output` — which
+# downstream reads as "no verdict" and fails closed to ai-review:changes.
+#
+# has_verdict() is GONE, not re-keyed (DR-079, #1165). It grepped for the bare
+# opening marker, so a voter that merely quoted the token satisfied it: a hijacked
+# voter echoing an injected block was forwarded verbatim, and a genuine outage that
+# quoted the marker skipped the quota classifier entirely. Re-keying it to a new
+# token would have preserved both defects in a new spelling. Authenticity now comes
+# from a channel the agent cannot write, not from characters it must avoid typing.
+#
+# #1444 line-anchored has_verdict() in the interim, and that is what this replaces:
+# anchoring narrowed the prose-mention path without closing it, because every
+# predicate still permits leading whitespace and a unified-diff context line is
+# space-prefixed. The completeness property anchoring was protecting (#1131 — an
+# opening marker alone means the agent died mid-review) is now structural: a block
+# is rendered from parsed JSON or not at all, so a half-written verdict cannot exist.
+render_verdict() {
+  [[ -f "$GUARD" ]] || return 1
+  local block
+  block="$(GUARD="$GUARD" node -e 'const g=require(process.env.GUARD);let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(g.parseCliVerdict(s)));' <<<"${1:-}" 2>/dev/null || true)"
+  [[ -n "$block" ]] || return 1
+  printf '%s' "$block"
+}
 
 # Quota / rate-limit / transient? Delegate to the tested pure classifier so bash and
 # JS never drift. node is always present where this runs (CI setup-node; local
@@ -205,37 +292,114 @@ is_quota() {
   GUARD="$GUARD" node -e 'const g=require(process.env.GUARD);let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.exit(g.isQuotaExhaustion(s)?0:1));' <<<"${1:-}" 2>/dev/null
 }
 
+# STRICT classification, for text that may be the AGENT's prose rather than the
+# harness's own diagnostics. Requires the CLI's characteristic limit phrasing and
+# ignores the bare topic words a reviewer would use while DESCRIBING quota handling.
+is_quota_strict() {
+  [[ -f "$GUARD" ]] || return 1
+  GUARD="$GUARD" node -e 'const g=require(process.env.GUARD);let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.exit(g.isQuotaExhaustionStrict(s)?0:1));' <<<"${1:-}" 2>/dev/null
+}
+
 # Emit the distinct, machine-parseable "could not run" marker → review-decide.sh maps
 # it to ai-review:blocked (retry-able), never ai-review:changes. `detail` carries the
 # trimmed claude limit/reset lines for the PR comment.
 emit_unavailable() {
   local detail
   detail=$(printf '%s\n' "${1:-}" | tr -d '\r' | grep -iE 'limit|quota|reset|try again|429|overload' | head -3 | sed 's/^/  /' || true)
-  printf 'REVIEW_UNAVAILABLE_BEGIN\nreason: quota\ndetail: |\n%s\nREVIEW_UNAVAILABLE_END\n' "${detail:-  (no detail captured; likely subscription session quota)}"
+
+  # #1630 — when NOTHING was captured, `reason: quota` is an INFERENCE, not an
+  # observation, and the old wording ("likely subscription session quota") admitted as
+  # much in prose while the machine-readable `reason:` still asserted it flatly. Two
+  # costs: the stated reset time #1619 schedules retries against is absent, and a genuine
+  # crash that writes nothing is indistinguishable from a transient outage — so it rides
+  # the retry loop forever presenting as retry-able.
+  #
+  # The evidence is now emitted alongside the claim so the NEXT occurrence is explicable
+  # without re-deriving it from source: which stream carried text, how much, and which
+  # classifier branch fired. Diagnostics only — `reason:` is unchanged, because changing
+  # what the gate concludes is a separate decision (tracked on #1630) and must not ride in
+  # on an observability fix.
+  local err_len out_len branch
+  err_len=${#AGENT_ERR}
+  out_len=$(agent_stdout_text | wc -c | tr -d ' ')
+  if [[ -n "${AGENT_ERR//[[:space:]]/}" ]]; then branch="stderr(loose)"; else branch="stdout(strict)"; fi
+
+  if [[ -n "$detail" ]]; then
+    printf 'REVIEW_UNAVAILABLE_BEGIN\nreason: quota\nevidence: captured\nclassified_via: %s\nstderr_bytes: %s\nstdout_bytes: %s\ndetail: |\n%s\nREVIEW_UNAVAILABLE_END\n' \
+      "$branch" "$err_len" "$out_len" "$detail"
+  else
+    printf 'REVIEW_UNAVAILABLE_BEGIN\nreason: quota\nevidence: NONE (reason is inferred, not observed)\nclassified_via: %s\nstderr_bytes: %s\nstdout_bytes: %s\ndetail: |\n%s\nREVIEW_UNAVAILABLE_END\n' \
+      "$branch" "$err_len" "$out_len" "  (no diagnostic text on either stream — see #1630)"
+  fi
 }
 
-# 1) Try the reviewer on the subscription token. A clean run WITH a verdict → done.
-if run_reviewer subscription && has_verdict "$AGENT_OUT"; then
-  printf '%s\n' "$AGENT_OUT"
+# Is this failure a quota/transient outage? (#1131)
+#
+# The two streams carry different KINDS of text and are judged by different bars:
+#
+#   stderr — the harness talking. Judged by the full classifier, bare topic words and
+#            all, because that text is not authored by the model.
+#   stdout — may be the agent's own prose. Judged STRICTLY: only the CLI's
+#            characteristic limit phrasing counts, never a bare mention of "quota",
+#            which is what a review of THIS file says on every line.
+#
+# stderr is authoritative when it says anything at all; stdout is consulted only when
+# stderr is silent, so a CLI that printed its limit notice on stdout still yields a
+# retry-able `blocked` rather than a crash blamed on the dev's code. This closes the
+# residual gap the #1155 reviewers flagged: a genuine crash whose stdout happens to
+# discuss quota now fails closed to a human instead of looping as retry-able.
+#
+# stdout is now a JSON envelope (DR-079), so it is DECODED to its `.result` text
+# before classification. Matching the raw envelope would let JSON escaping split a
+# phrase like "resets at" across an escape and silently downgrade a retry-able
+# `blocked` into `changes` — an outage reported to the dev as a code problem.
+agent_stdout_text() {
+  [[ -f "$GUARD" ]] || { printf '%s' "$AGENT_OUT"; return 0; }
+  node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const e=JSON.parse(s);process.stdout.write(typeof e.result==="string"?e.result:s);}catch{process.stdout.write(s);}});' <<<"$AGENT_OUT" 2>/dev/null || printf '%s' "$AGENT_OUT"
+}
+
+quota_failure() {
+  if [[ -n "${AGENT_ERR//[[:space:]]/}" ]]; then
+    is_quota "$AGENT_ERR"
+  else
+    is_quota_strict "$(agent_stdout_text)"
+  fi
+}
+
+# The text shown to a HUMAN in the unavailable marker — both streams, since by this
+# point we have already decided it was an outage and the reader wants the evidence.
+quota_detail() { printf '%s\n%s' "$AGENT_ERR" "$(agent_stdout_text)"; }
+
+# 1) Try the reviewer on the subscription token. A schema-valid structured verdict
+#    is a finished review and wins outright — the exit status is advisory, not
+#    authoritative (#1131). The CLI can exit non-zero after a review has been
+#    returned in full (a late transport hiccup, a teardown warning); discarding it
+#    over that lost real reviews AND then misattributed the loss to quota, because
+#    the discarded text was handed to a content matcher that saw its own subject
+#    matter. If the reviewer finished, use what it returned.
+run_reviewer subscription || true
+if VERDICT_BLOCK="$(render_verdict "$AGENT_OUT")"; then
+  printf '%s' "$VERDICT_BLOCK"
   exit 0
 fi
 
-# 2) No verdict. Distinguish a quota/transient block (retry-able, NOT the dev's code)
-#    from a genuine crash (fail closed to changes, as before).
-if is_quota "$AGENT_OUT"; then
+# 2) No complete verdict. Distinguish a quota/transient block (retry-able, NOT the
+#    dev's code) from a genuine crash (fail closed to changes, as before).
+if quota_failure; then
   # 2a) Optional PAYG-API failover before giving up — config-gated (AI_REVIEW_FAILOVER
   #     = "payg") AND a key present. Lets a dev who has run out of subscription quota
   #     keep reviewing on PAYG instead of stalling for the whole reset window.
   if [[ "${AI_REVIEW_FAILOVER:-wait}" == "payg" && -n "${ANTHROPIC_API_KEY:-}" ]]; then
     echo "review-branch.sh: subscription quota hit — failing over to PAYG API (role=$ROLE)" >&2
-    if run_reviewer payg && has_verdict "$AGENT_OUT"; then
-      printf '%s\n' "$AGENT_OUT"
+    run_reviewer payg || true
+    if VERDICT_BLOCK="$(render_verdict "$AGENT_OUT")"; then
+      printf '%s' "$VERDICT_BLOCK"
       exit 0
     fi
     echo "review-branch.sh: PAYG failover also produced no verdict (role=$ROLE)" >&2
   fi
   echo "review-branch.sh: reviewer UNAVAILABLE (quota/transient, role=$ROLE) — → ai-review:blocked (retry-able)" >&2
-  emit_unavailable "$AGENT_OUT"
+  emit_unavailable "$(quota_detail)"
   exit 0
 fi
 
@@ -243,5 +407,6 @@ fi
 #    closed to request-changes (never a false pass). Surface output on stderr.
 echo "review-branch.sh: reviewer agent (role=$ROLE) failed (non-quota) — gate fails closed" >&2
 printf '%s\n' "$AGENT_OUT" >&2
+printf '%s\n' "$AGENT_ERR" >&2
 exit 0
 # <<< minspec:managed:review-branch-script <<<
