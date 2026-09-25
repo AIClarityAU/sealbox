@@ -268,3 +268,140 @@ test('VERDICT_SCHEMA constrains the structured channel to the two verdicts', () 
   assert.match(json, /"changes"/);
   assert.match(json, /blocking/);
 });
+
+// ─── decideStatus hold gate (DR-072 §3) ─────────────────────────────────────
+//
+// LIVE, not dormant. ready-to-merge.yml already calls decideStatus with real PR
+// labels and loads the guard from main, so the `held` branch below starts gating
+// every PR in this repo the moment this guard lands - unlike the verdict-channel
+// and blocked-by functions above, whose consumers arrive with the workflow refresh.
+// That is why these cases are here rather than deferred: a regression dropping the
+// `held.length === 0` term would silently green a held PR.
+
+const VERIFIED_PASS = { verified: true };
+const VERIFIED_HEAD = { verified: true };
+
+test('decideStatus: a hold label forces failure even with a verified pass and head witness', () => {
+  const r = g.decideStatus({
+    labels: [g.PASS, 'hold:human'],
+    passProvenance: VERIFIED_PASS,
+    headStatus: VERIFIED_HEAD,
+  });
+  assert.equal(r.state, 'failure', 'a hold is decisive no matter how green the review is');
+  assert.match(r.description, /held/);
+  assert.match(r.description, /hold:human/, 'the offending label is named');
+});
+
+test('decideStatus: without the hold, that same PR is green - so the hold is what flipped it', () => {
+  const r = g.decideStatus({
+    labels: [g.PASS],
+    passProvenance: VERIFIED_PASS,
+    headStatus: VERIFIED_HEAD,
+  });
+  assert.equal(r.state, 'success');
+  assert.equal(r.description, 'AI review passed');
+});
+
+test('decideStatus: the hold reason is reported AHEAD of staleness and provenance outcomes', () => {
+  // A reader told "stale pass stripped - re-review required" on a held PR would
+  // re-review and still be red, with no hint why. Hold must win the description.
+  const stale = g.decideStatus({
+    labels: [g.PASS, 'hold:tier'],
+    stalenessStrip: true,
+    passProvenance: VERIFIED_PASS,
+    headStatus: VERIFIED_HEAD,
+  });
+  assert.match(stale.description, /^held/);
+  assert.ok(!/stale ai-review:pass stripped/.test(stale.description));
+
+  const reverted = g.decideStatus({
+    labels: [g.PASS, 'hold:human'],
+    provenanceRevert: true,
+    passProvenance: VERIFIED_PASS,
+    headStatus: VERIFIED_HEAD,
+  });
+  assert.match(reverted.description, /^held/);
+  assert.ok(!/reverted/.test(reverted.description));
+});
+
+test('decideStatus: every hold value gates, and multiple holds are all named', () => {
+  for (const hold of ['hold:human', 'hold:tier', 'hold:specify', 'hold:anything']) {
+    assert.equal(
+      g.decideStatus({ labels: [g.PASS, hold], passProvenance: VERIFIED_PASS, headStatus: VERIFIED_HEAD }).state,
+      'failure',
+      hold,
+    );
+  }
+  const many = g.decideStatus({
+    labels: [g.PASS, 'hold:human', 'hold:tier'],
+    passProvenance: VERIFIED_PASS,
+    headStatus: VERIFIED_HEAD,
+  });
+  assert.match(many.description, /hold:human/);
+  assert.match(many.description, /hold:tier/);
+});
+
+test('decideStatus: a label merely containing "hold" is not a hold', () => {
+  // HOLD_RE is anchored; "threshold:" and "on hold" must not gate a passing PR.
+  const r = g.decideStatus({
+    labels: [g.PASS, 'threshold:3', 'on hold: later'],
+    passProvenance: VERIFIED_PASS,
+    headStatus: VERIFIED_HEAD,
+  });
+  assert.equal(r.state, 'success', 'anchoring must not be loosened into a substring match');
+});
+
+test('decideStatus: the pre-existing gates still hold alongside the new one', () => {
+  const unverifiedPass = g.decideStatus({
+    labels: [g.PASS],
+    passProvenance: { verified: false, reason: 'applier not allowlisted' },
+    headStatus: VERIFIED_HEAD,
+  });
+  assert.equal(unverifiedPass.state, 'failure');
+  assert.match(unverifiedPass.description, /not trusted/);
+
+  const staleHead = g.decideStatus({
+    labels: [g.PASS],
+    passProvenance: VERIFIED_PASS,
+    headStatus: { verified: false, reason: 'no ai-review/pass status on the current head SHA' },
+  });
+  assert.equal(staleHead.state, 'failure');
+  assert.match(staleHead.description, /not bound to this commit/);
+
+  const changes = g.decideStatus({
+    labels: [g.PASS, g.CHANGES],
+    passProvenance: VERIFIED_PASS,
+    headStatus: VERIFIED_HEAD,
+  });
+  assert.equal(changes.state, 'failure', 'a changes label blocks even beside a verified pass');
+});
+
+// ─── shouldAwaitApproval: the new draft / blocker arms ───────────────────────
+//
+// Dormant here - ready-to-merge.yml still calls this with only statusState and
+// autoMergeArmed - so these guard the arms against regression before the workflow
+// refresh wires them, rather than asserting live behaviour.
+
+test('shouldAwaitApproval: the pre-existing contract is unchanged when the new args are absent', () => {
+  assert.equal(g.shouldAwaitApproval({ statusState: 'success', autoMergeArmed: false }), true);
+  assert.equal(g.shouldAwaitApproval({ statusState: 'success', autoMergeArmed: true }), false);
+  assert.equal(g.shouldAwaitApproval({ statusState: 'failure', autoMergeArmed: false }), false);
+  assert.equal(g.shouldAwaitApproval(), false);
+});
+
+test('shouldAwaitApproval: a draft or an open blocker suppresses the your-turn signal', () => {
+  const ready = { statusState: 'success', autoMergeArmed: false };
+  assert.equal(g.shouldAwaitApproval({ ...ready, isDraft: true }), false);
+  assert.equal(g.shouldAwaitApproval({ ...ready, openBlockers: [1225] }), false);
+  assert.equal(g.shouldAwaitApproval({ ...ready, openBlockers: [] }), true, 'empty list is not a blocker');
+});
+
+test('shouldAwaitApproval and shouldMarkBlockedBy are exact complements on the blocker arm', () => {
+  // One function decides, the applier mirrors it, so the two labels can never
+  // both be present.
+  for (const openBlockers of [[], [7], [7, 9]]) {
+    const awaiting = g.shouldAwaitApproval({ statusState: 'success', autoMergeArmed: false, openBlockers });
+    const blocked = g.shouldMarkBlockedBy({ openBlockers });
+    assert.notEqual(awaiting, blocked, JSON.stringify(openBlockers));
+  }
+});
