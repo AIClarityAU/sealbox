@@ -1,9 +1,13 @@
+// >>> minspec:managed:ai-review-guard-test >>>
 // Unit tests for the ai-review label-integrity decision logic.
 // Runs on plain Node (no deps): `node --test .github/scripts/ai-review-guard.test.js`.
-// Wired into CI's `test` job (ci.yml, added in #27) so the security-critical
-// decisions stay enforced. That job discovers every *.test.js rather than
-// naming them, and fails when discovery comes up empty, so this suite cannot
-// silently stop running.
+//
+// This suite is a PARITY-MANAGED file (AIClarityAU/minspec#871): it ships alongside
+// ai-review-guard.js and is byte-synced to it by the same machinery, so the guard's
+// own "see ai-review-guard.test.js" resolves wherever the guard lands. In MinSpec's
+// own repo CI's lint job runs it on every PR; in a repo that scaffolded this stack
+// nothing runs it automatically yet (AIClarityAU/minspec#2059) - until that lands,
+// run the command above by hand.
 
 'use strict';
 
@@ -24,8 +28,12 @@ const {
   verifyHeadPassCheckRun,
   verifyHeadPassWitness,
   PASS_STATUS_CONTEXT,
+  HOLD_RE,
   decideStatus,
   shouldAwaitApproval,
+  BLOCKED_BY,
+  parseBlockedBy,
+  shouldMarkBlockedBy,
   shouldSummonHumanReview,
   AWAITING_APPROVAL,
   decideReviewCheck,
@@ -310,6 +318,12 @@ test('status: description never exceeds the 140-char commit-status limit', () =>
     { labels: [] },
     { labels: [PASS], provenanceRevert: true },
     { labels: [PASS], stalenessStrip: true },
+    { labels: [PASS, 'hold:human'], passProvenance: VERIFIED },
+    // A pathological pile of long hold labels must still fit the 140-char limit.
+    {
+      labels: [PASS, ...Array.from({ length: 12 }, (_, i) => `hold:${'x'.repeat(20)}${i}`)],
+      passProvenance: VERIFIED,
+    },
   ];
   for (const c of cases) {
     assert.ok(decideStatus(c).description.length <= 140);
@@ -783,3 +797,663 @@ test('#816 invariant: machinery pass → needs-human-review, and ready-to-merge 
   assert.equal(shouldAwaitApproval({ statusState: held.state, autoMergeArmed: false }), false);
   assert.equal(shouldSummonHumanReview({ label: PASS, isMachinery: true }), true);
 });
+
+// ─── #1247 — blocked-by: a PR waiting on an open dependency is nobody's turn ───
+
+test('parseBlockedBy: recognises the plain declaration', () => {
+  assert.deepEqual(parseBlockedBy('Blocked by #1225'), [1225]);
+});
+
+test('parseBlockedBy: colon, several refs on one line, and markdown decoration', () => {
+  assert.deepEqual(parseBlockedBy('Blocked by: #1225, #1179'), [1179, 1225]);
+  assert.deepEqual(parseBlockedBy('- **Blocked by** #1225'), [1225]);
+  assert.deepEqual(parseBlockedBy('> blocked by #7'), [7]);
+});
+
+test('parseBlockedBy: de-duplicates and sorts numerically, not lexically', () => {
+  // Lexical sort would give [1225, 7, 90]; the numeric order is the readable one.
+  assert.deepEqual(parseBlockedBy('Blocked by #90\nBlocked by #7, #1225, #90'), [7, 90, 1225]);
+});
+
+test('parseBlockedBy: empty for no declaration, null, undefined, or empty body', () => {
+  assert.deepEqual(parseBlockedBy('Just an ordinary PR body mentioning #1225.'), []);
+  assert.deepEqual(parseBlockedBy(null), []);
+  assert.deepEqual(parseBlockedBy(undefined), []);
+  assert.deepEqual(parseBlockedBy(''), []);
+});
+
+test('parseBlockedBy: PROSE never mints the label (the false-positive that would park a mergeable PR)', () => {
+  // Each of these contains both the words and a #ref, but none is a declaration.
+  assert.deepEqual(parseBlockedBy('The deploy was blocked by a stale cache; see #1225.'), []);
+  assert.deepEqual(parseBlockedBy('#1225 was blocked by design.'), []);
+  assert.deepEqual(parseBlockedBy('Previously this got blocked by CI (#99) but no longer.'), []);
+});
+
+test('parseBlockedBy: a ref on a LATER line is not swept into an earlier declaration', () => {
+  assert.deepEqual(parseBlockedBy('Blocked by #1225\n\nAlso relates to #4242.'), [1225]);
+});
+
+test('shouldMarkBlockedBy: true only when a blocker is still open', () => {
+  assert.equal(shouldMarkBlockedBy({ openBlockers: [1225] }), true);
+  assert.equal(shouldMarkBlockedBy({ openBlockers: [] }), false);
+  assert.equal(shouldMarkBlockedBy({}), false);
+  assert.equal(shouldMarkBlockedBy(), false);
+});
+
+test('#1247: an open blocker beats a green gate — NOT your turn', () => {
+  assert.equal(
+    shouldAwaitApproval({ statusState: 'success', autoMergeArmed: false, openBlockers: [1225] }),
+    false,
+  );
+});
+
+test('#1247: a CLOSED blocker restores the your-turn signal', () => {
+  // The workflow passes only the still-open subset, so a resolved blocker is simply absent.
+  assert.equal(
+    shouldAwaitApproval({ statusState: 'success', autoMergeArmed: false, openBlockers: [] }),
+    true,
+  );
+});
+
+test('#1247: a draft is never your turn to merge, however green the gate', () => {
+  assert.equal(
+    shouldAwaitApproval({ statusState: 'success', autoMergeArmed: false, isDraft: true }),
+    false,
+  );
+});
+
+test('#1247: the two labels are mutually exclusive by construction', () => {
+  // One decision function drives both, so no PR can ever carry blocked-by AND
+  // awaiting-approval — the contradiction the queue must never show.
+  for (const openBlockers of [[], [1225], [1225, 1179]]) {
+    const args = { statusState: 'success', autoMergeArmed: false, openBlockers };
+    assert.equal(shouldAwaitApproval(args) && shouldMarkBlockedBy(args), false);
+  }
+});
+
+test('#1247: existing callers that pass neither new field keep their old behaviour', () => {
+  // Back-compat guard — ready-to-merge.yml is not the only reader over time.
+  assert.equal(shouldAwaitApproval({ statusState: 'success', autoMergeArmed: false }), true);
+  assert.equal(shouldAwaitApproval({ statusState: 'failure', autoMergeArmed: false }), false);
+});
+
+test('#1247: BLOCKED_BY is distinct from the reviewer-transient ai-review:blocked', () => {
+  assert.notEqual(BLOCKED_BY, BLOCKED);
+  assert.equal(BLOCKED_BY, 'blocked-by');
+  assert.equal(BLOCKED, 'ai-review:blocked');
+});
+
+test('parseBlockedBy: a trailing explanation on the SAME line cannot smuggle in a ref', () => {
+  // The exact line that exposed this — written by hand against the first revision,
+  // which returned [1225, 1246] because it scanned the whole line.
+  const body =
+    'Blocked by #1225 — FR-8 cannot be implemented until the standing-consent store ' +
+    'is settled (DR-078, merged as `proposed` in #1246, awaiting *Accept ADR*).';
+  assert.deepEqual(parseBlockedBy(body), [1225]);
+});
+
+test('parseBlockedBy: multiple refs still work before an explanation', () => {
+  assert.deepEqual(parseBlockedBy('Blocked by #7, #9 and #11 — see the thread on #4242.'), [7, 9, 11]);
+  assert.deepEqual(parseBlockedBy('Blocked by: #7, #9'), [7, 9]);
+});
+
+test('parseBlockedBy: a declaration with NO leading ref yields nothing', () => {
+  // "Blocked by the release freeze (see #1225)" is prose, not a declaration.
+  assert.deepEqual(parseBlockedBy('Blocked by the release freeze (see #1225).'), []);
+});
+
+// ── verdict-label coherence (#1468) ──────────────────────────────────────────
+// The PR's label set is the merge gate's INPUT, so the property that matters is
+// not "the removal calls were issued" but "the PR now asserts exactly one
+// verdict". #1430 carried ai-review:pass AND ai-review:changes at once and
+// ready-to-merge withheld forever, with nothing on the PR explaining why.
+const guard = require('./ai-review-guard.js');
+
+test('decideVerdictLabels: changes → pass removes the stale opposite verdict', () => {
+  // The exact #1430 shape: round 1 left `changes`, round 2 decided `pass`.
+  const d = guard.decideVerdictLabels({
+    current: ['ai-review:changes', 'docs-lane'],
+    verdict: 'ai-review:pass',
+  });
+  assert.deepEqual(d.remove, ['ai-review:changes']);
+  assert.deepEqual(d.add, ['ai-review:pass']);
+  assert.deepEqual(d.expected, ['ai-review:pass']);
+});
+
+test('decideVerdictLabels: clears pending too, and never touches other labels', () => {
+  const d = guard.decideVerdictLabels({
+    current: ['ai-review:pending', 'ai-review:blocked', 'docs-lane', 'needs-human-review'],
+    verdict: 'ai-review:changes',
+  });
+  assert.deepEqual(d.remove.sort(), ['ai-review:blocked', 'ai-review:pending']);
+  // Non-verdict labels are outside this function's remit entirely.
+  assert.ok(!JSON.stringify(d).includes('docs-lane'));
+  assert.ok(!JSON.stringify(d).includes('needs-human-review'));
+});
+
+test('decideVerdictLabels: re-running on an already-correct PR is a no-op', () => {
+  const d = guard.decideVerdictLabels({ current: ['ai-review:pass'], verdict: 'ai-review:pass' });
+  assert.deepEqual(d.remove, []);
+  assert.deepEqual(d.add, []);
+});
+
+test('decideVerdictLabels: an unknown verdict throws rather than guessing', () => {
+  assert.throws(() => guard.decideVerdictLabels({ current: [], verdict: 'ai-review:maybe' }));
+});
+
+test('verdictLabelFault: contradictory labels are a fault, and it names both', () => {
+  const f = guard.verdictLabelFault({
+    current: ['ai-review:pass', 'ai-review:changes', 'docs-lane'],
+    verdict: 'ai-review:pass',
+  });
+  assert.ok(f, 'two verdicts at once must be reported');
+  assert.match(f, /ai-review:changes/);
+  assert.match(f, /ai-review:pass/);
+});
+
+test('verdictLabelFault: a missing verdict label is a fault', () => {
+  const f = guard.verdictLabelFault({ current: ['docs-lane'], verdict: 'ai-review:pass' });
+  assert.match(f, /no verdict label/);
+});
+
+test('verdictLabelFault: the WRONG single verdict is a fault', () => {
+  const f = guard.verdictLabelFault({ current: ['ai-review:changes'], verdict: 'ai-review:pass' });
+  assert.ok(f);
+});
+
+test('verdictLabelFault: exactly the decided verdict is clean', () => {
+  assert.equal(
+    guard.verdictLabelFault({
+      current: ['ai-review:pass', 'docs-lane', 'needs-human-review'],
+      verdict: 'ai-review:pass',
+    }),
+    null,
+  );
+});
+
+// ─── #1204: the stated reset time must be extracted, not discarded ───────────
+// The retry polled blindly because nothing parsed "resets <time>". On PR #1602
+// that cost six attempts over 4h21m, five futile. `nowMs` is injected so these
+// are deterministic across DST.
+{
+  const { parseResetInstant } = require('./ai-review-guard.js');
+
+  // 2026-08-19T10:32:32Z — the real instant #1602 was blocked at.
+  const BLOCKED_AT = Date.parse('2026-08-19T10:32:32Z');
+
+  test('parseResetInstant: the real #1602 string resolves to the NEXT 12:50am Sydney', () => {
+    const out = parseResetInstant(
+      "You've hit your session limit · resets 12:50am (Australia/Sydney)",
+      BLOCKED_AT,
+    );
+    // 12:50am Sydney on 2026-08-20 is 14:50Z on 2026-08-19 (UTC+10, no DST in August).
+    assert.equal(out, '2026-08-19T14:50:00.000Z');
+    assert.ok(Date.parse(out) > BLOCKED_AT, 'a stated reset is always in the future');
+  });
+
+  test('parseResetInstant: UTC form from the #1190 evidence', () => {
+    const out = parseResetInstant('quota exhausted, resets 8:40am (UTC)', Date.parse('2026-08-05T08:25:00Z'));
+    assert.equal(out, '2026-08-05T08:40:00.000Z');
+  });
+
+  test('parseResetInstant: a time already past today rolls to tomorrow', () => {
+    // 08:40 UTC seen at 20:00 UTC must mean tomorrow, not 11h ago.
+    const out = parseResetInstant('resets 8:40am (UTC)', Date.parse('2026-08-05T20:00:00Z'));
+    assert.equal(out, '2026-08-06T08:40:00.000Z');
+  });
+
+  test('parseResetInstant: relative form needs no timezone', () => {
+    const out = parseResetInstant('rate limited, try again in 25 minutes', Date.parse('2026-08-05T10:00:00Z'));
+    assert.equal(out, '2026-08-05T10:25:00.000Z');
+  });
+
+  test('parseResetInstant: 12-hour meridiem edges', () => {
+    assert.equal(parseResetInstant('resets 12:00am (UTC)', Date.parse('2026-08-05T10:00:00Z')),
+      '2026-08-06T00:00:00.000Z');
+    assert.equal(parseResetInstant('resets 12:30pm (UTC)', Date.parse('2026-08-05T10:00:00Z')),
+      '2026-08-05T12:30:00.000Z');
+  });
+
+  test('parseResetInstant: no zone stated → null, never a guess', () => {
+    // Guessing the runner's zone would silently anchor the window to the wrong
+    // place; null means "retry on the normal cadence", which is safe.
+    assert.equal(parseResetInstant('resets 8:40am', BLOCKED_AT), null);
+  });
+
+  test('parseResetInstant: unparseable / absent / bad zone → null, never throws', () => {
+    assert.equal(parseResetInstant('some unrelated failure', BLOCKED_AT), null);
+    assert.equal(parseResetInstant('', BLOCKED_AT), null);
+    assert.equal(parseResetInstant(null, BLOCKED_AT), null);
+    assert.equal(parseResetInstant('resets 8:40am (Not/AZone)', BLOCKED_AT), null);
+    assert.equal(parseResetInstant('resets 99:99am (UTC)', BLOCKED_AT), null);
+  });
+
+  test('parseResetInstant: a non-finite now is refused rather than producing garbage', () => {
+    assert.equal(parseResetInstant('resets 8:40am (UTC)', NaN), null);
+  });
+}
+
+// ─── #1728: patch-fingerprint re-attestation ────────────────────────────────
+// Under `strict` a forward-merge leaves the three-dot patch byte-identical but
+// re-triggers a full four-voter review. These pin that a re-attestation is only
+// ever offered under the SAME provenance strictness as the witness itself.
+{
+  const {
+    patchFingerprint, renderPatchFingerprint, parsePatchFingerprint,
+    findReattestableVerdict, CHECK_NAME,
+  } = require('./ai-review-guard.js');
+
+  const ALLOW = ['minspec-sdd', 'minspec-sdd[bot]'];
+  const PATCH = 'diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n';
+  const fp = patchFingerprint(PATCH);
+  const run = (o = {}) => ({
+    name: CHECK_NAME, status: 'completed', conclusion: 'success',
+    head_sha: 'aaaaaaaaaaaa', app: { slug: 'minspec-sdd' },
+    output: { title: 'ok', summary: renderPatchFingerprint(fp) }, ...o,
+  });
+
+  test('patchFingerprint: stable, and ignores only cosmetic trailing whitespace', () => {
+    assert.equal(patchFingerprint(PATCH), patchFingerprint(PATCH.replace(/\n$/, '\n\n')));
+    assert.equal(patchFingerprint(PATCH), patchFingerprint(PATCH.replace(/\n/g, '\r\n')));
+  });
+
+  test('patchFingerprint: any real content change changes the digest', () => {
+    assert.notEqual(patchFingerprint(PATCH), patchFingerprint(PATCH.replace('+b', '+c')));
+  });
+
+  test('patchFingerprint: an EMPTY patch is never fingerprinted (never re-attestable)', () => {
+    // An empty diff is #1680's case and must go nowhere near this path.
+    assert.equal(patchFingerprint(''), null);
+    assert.equal(patchFingerprint(null), null);
+    assert.equal(findReattestableVerdict({ checkRuns: [run()], patchHash: null, allowlist: ALLOW }).ok, false);
+  });
+
+  test('THE #1728 CASE: an unchanged patch re-attests from the prior SHA', () => {
+    const r = findReattestableVerdict({ checkRuns: [run()], patchHash: fp, allowlist: ALLOW });
+    assert.equal(r.ok, true);
+    assert.equal(r.sourceSha, 'aaaaaaaaaaaa');
+  });
+
+  test('a DIFFERENT patch never re-attests', () => {
+    const other = patchFingerprint(PATCH.replace('+b', '+c'));
+    assert.equal(findReattestableVerdict({ checkRuns: [run()], patchHash: other, allowlist: ALLOW }).ok, false);
+  });
+
+  // Provenance: the same strictness as the witness. A softer door here would be a
+  // second, weaker entrance to the same gate.
+  test('refuses a non-success, non-completed, or wrong-named prior run', () => {
+    for (const bad of [{ conclusion: 'failure' }, { conclusion: 'neutral' }, { status: 'in_progress' }, { name: 'other' }]) {
+      assert.equal(findReattestableVerdict({ checkRuns: [run(bad)], patchHash: fp, allowlist: ALLOW }).ok, false);
+    }
+  });
+
+  test('refuses a run posted by an app OUTSIDE the allowlist', () => {
+    const impostor = run({ app: { slug: 'somebody-else' } });
+    assert.equal(findReattestableVerdict({ checkRuns: [impostor], patchHash: fp, allowlist: ALLOW }).ok, false);
+  });
+
+  test('refuses when the allowlist is empty — never re-attest with no trusted producer', () => {
+    assert.equal(findReattestableVerdict({ checkRuns: [run()], patchHash: fp, allowlist: [] }).ok, false);
+    assert.equal(findReattestableVerdict({ checkRuns: [run()], patchHash: fp }).ok, false);
+  });
+
+  test('fails safe on missing/garbage input rather than throwing', () => {
+    for (const bad of [undefined, {}, { checkRuns: null, patchHash: fp, allowlist: ALLOW }, { checkRuns: [null], patchHash: fp, allowlist: ALLOW }]) {
+      assert.equal(findReattestableVerdict(bad).ok, false);
+    }
+  });
+
+  test('the fingerprint round-trips through the check-run output text', () => {
+    assert.equal(parsePatchFingerprint(renderPatchFingerprint(fp)), fp);
+    assert.equal(parsePatchFingerprint('no marker here'), null);
+    assert.equal(parsePatchFingerprint('patch-fingerprint:short'), null);
+  });
+}
+
+// ─── #1839 / #1925: the check-run step must survive an OLDER base guard ─────
+// The `ai-review` check-run step runs from the PR HEAD (`on: pull_request`) but
+// requires ai-review-guard.js from the BASE checkout. So a PR that adds a guard
+// export AND calls it from the workflow runs its new YAML against the OLD module.
+// #1839 called `g.patchFingerprint` unguarded: against main's guard it threw
+// `TypeError: g.patchFingerprint is not a function`, the step's
+// `if ! node …; then exit 0` swallowed it, the job went green, and the REQUIRED
+// check-run was never posted. The fingerprint marker is optional; the check-run
+// is not.
+//
+// These EXECUTE the step's shipped `run:` block, lifted out of the YAML rather
+// than re-typed here, so the rule under test is the shipped seam. `gh` is a PATH
+// stub that records what would be POSTed; `bash`, `node`, `git` and the guard's
+// decideReviewCheck are real. The guard at $GITHUB_WORKSPACE is a stub so each
+// case can model a different base.
+{
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { spawnSync } = require('node:child_process');
+
+  const WORKFLOW = path.join(__dirname, '..', 'workflows', 'ai-review.yml');
+  const REAL_GUARD = path.join(__dirname, 'ai-review-guard.js');
+  const real = require('./ai-review-guard.js');
+  const STEP_NAME = '- name: Post honest `ai-review` verdict check-run as minspec-sdd[bot]';
+  const NOT_POSTED = 'title=ai-review check not posted';
+
+  // Every export #1728 added. A base that predates #1728 has none of them.
+  const ADDED_BY_1728 = [
+    'patchFingerprint', 'renderPatchFingerprint', 'parsePatchFingerprint',
+    'findReattestableVerdict', 'PATCH_FINGERPRINT_PREFIX',
+  ];
+
+  const indentOf = (l) => l.length - l.trimStart().length;
+
+  /** The check-run step's `run: |` block scalar, dedented exactly as Actions runs it. */
+  function stepRunBlock() {
+    const lines = fs.readFileSync(WORKFLOW, 'utf8').split('\n');
+    const nameAt = lines.findIndex((l) => l.trim() === STEP_NAME);
+    if (nameAt < 0) {
+      throw new Error(`step "${STEP_NAME}" is missing from ${WORKFLOW}; the block this test guards was renamed or removed, so its behaviour is unverified`);
+    }
+    const stepIndent = indentOf(lines[nameAt]);
+    let runAt = -1;
+    for (let i = nameAt + 1; i < lines.length; i++) {
+      if (lines[i].trim() === '') continue;
+      if (indentOf(lines[i]) <= stepIndent) break; // reached the next step
+      if (lines[i].trim() === 'run: |') { runAt = i; break; }
+    }
+    if (runAt < 0) throw new Error('the check-run step has no `run: |` block');
+    const keyIndent = indentOf(lines[runAt]);
+    const body = [];
+    let blockIndent = -1;
+    for (let i = runAt + 1; i < lines.length; i++) {
+      const l = lines[i];
+      if (l.trim() === '') { body.push(''); continue; }
+      if (indentOf(l) <= keyIndent) break;
+      if (blockIndent < 0) blockIndent = indentOf(l);
+      body.push(l.slice(blockIndent));
+    }
+    while (body.length && body[body.length - 1] === '') body.pop(); // `|` clips trailing blanks
+    const script = `${body.join('\n')}\n`;
+    // This harness runs the block as plain bash, so an Actions expression would reach
+    // it unevaluated. Fail loudly rather than test something the runner never runs.
+    if (script.includes('${{')) throw new Error('the check-run run block now contains an Actions expression; extend this harness to substitute it');
+    if (!script.includes('check-runs')) throw new Error('extracted run block does not post a check-run; the extractor picked up the wrong block');
+    return script;
+  }
+
+  /** Records every call, and keeps a copy of any `--input` file (the POSTed body). */
+  const GH_STUB = `#!/usr/bin/env bash
+set -u
+printf '%s\\n' "$*" >> "$GH_STUB_DIR/calls.log"
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "--input" ]; then cp "$a" "$GH_STUB_DIR/posted.json"; fi
+  prev="$a"
+done
+exit 0
+`;
+
+  /**
+   * Run the step once. `guardSource` becomes $GITHUB_WORKSPACE/.github/scripts/ai-review-guard.js.
+   * The workspace is a real git repo with a base and a head commit, so the step's own
+   * `git diff base...head` produces a real, non-empty three-dot patch.
+   */
+  function runStep(guardSource, { verdict = 'ai-review:pass', machinery = 'false' } = {}) {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-review-checkrun-'));
+    try {
+      const ws = path.join(tmp, 'ws');
+      const bin = path.join(tmp, 'bin');
+      const ghDir = path.join(tmp, 'gh');
+      const runnerTemp = path.join(tmp, 'runner');
+      for (const d of [ws, bin, ghDir, runnerTemp]) fs.mkdirSync(d, { recursive: true });
+      fs.writeFileSync(path.join(bin, 'gh'), GH_STUB, { mode: 0o755 });
+
+      // HOME points into tmp so no user/system git config leaks into the fixture.
+      const baseEnv = { PATH: `${bin}${path.delimiter}${process.env.PATH}`, HOME: tmp, GIT_CONFIG_NOSYSTEM: '1' };
+      const git = (...args) => {
+        const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', '-c', 'init.defaultBranch=main', ...args], { cwd: ws, env: baseEnv, encoding: 'utf8' });
+        if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr}`);
+        return r.stdout;
+      };
+      git('init', '-q');
+      fs.writeFileSync(path.join(ws, 'x.txt'), 'a\n');
+      git('add', 'x.txt');
+      git('commit', '-q', '-m', 'base');
+      const base = git('rev-parse', 'HEAD').trim();
+      fs.writeFileSync(path.join(ws, 'x.txt'), 'b\n');
+      git('commit', '-q', '-am', 'head');
+      const head = git('rev-parse', 'HEAD').trim();
+      const patch = git('diff', `${base}...${head}`);
+      assert.ok(patch.includes('+b'), 'fixture must yield a non-empty three-dot patch');
+
+      // Untracked, so it cannot change the commit-to-commit diff above.
+      fs.mkdirSync(path.join(ws, '.github', 'scripts'), { recursive: true });
+      fs.writeFileSync(path.join(ws, '.github', 'scripts', 'ai-review-guard.js'), guardSource);
+
+      const stepFile = path.join(tmp, 'step.sh');
+      fs.writeFileSync(stepFile, stepRunBlock());
+      // `bash -e {0}` is what Actions runs a `run:` with no `shell:` under.
+      const r = spawnSync('bash', ['-e', stepFile], {
+        cwd: ws,
+        encoding: 'utf8',
+        env: {
+          ...baseEnv,
+          GH_STUB_DIR: ghDir,
+          GITHUB_WORKSPACE: ws,
+          RUNNER_TEMP: runnerTemp,
+          GH_TOKEN: 'stub-token',
+          REPO: 'o/r',
+          HEAD_SHA: head,
+          VERDICT_LABEL: verdict,
+          IS_MACHINERY: machinery,
+          PR_BASE_SHA: base,
+          PR_HEAD_SHA: head,
+        },
+      });
+      const postedFile = path.join(ghDir, 'posted.json');
+      const callsFile = path.join(ghDir, 'calls.log');
+      return {
+        status: r.status,
+        stdout: r.stdout,
+        stderr: r.stderr,
+        head,
+        patch,
+        calls: fs.existsSync(callsFile) ? fs.readFileSync(callsFile, 'utf8') : '',
+        posted: fs.existsSync(postedFile) ? JSON.parse(fs.readFileSync(postedFile, 'utf8')) : null,
+      };
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+
+  const reexport = (body) => `'use strict';\nconst real = require(${JSON.stringify(REAL_GUARD)});\n${body}\n`;
+  const PRE_1728_GUARD = reexport(`const m = { ...real };\nfor (const k of ${JSON.stringify(ADDED_BY_1728)}) delete m[k];\nmodule.exports = m;`);
+  const CURRENT_GUARD = reexport('module.exports = real;');
+
+  /** The step posted exactly one check-run, carrying decideReviewCheck's verdict. */
+  function assertPosted(res, verdict, machinery) {
+    const c = real.decideReviewCheck(verdict, machinery === 'true');
+    assert.equal(res.status, 0, `step exited ${res.status}: ${res.stderr}`);
+    assert.ok(!res.stdout.includes(NOT_POSTED), `the check-run was not posted:\n${res.stdout}\n${res.stderr}`);
+    assert.match(res.calls, /^api -X POST repos\/o\/r\/check-runs --input /m, 'gh was never asked to POST the check-run');
+    assert.ok(res.posted, 'no check-run body reached gh');
+    assert.equal(res.posted.name, c.name);
+    assert.equal(res.posted.head_sha, res.head);
+    assert.equal(res.posted.status, 'completed');
+    assert.equal(res.posted.conclusion, c.conclusion);
+    assert.equal(res.posted.output.title, c.title);
+    return c;
+  }
+
+  /** Evaluate a stub guard source in-process, to check what it exports. */
+  function stubExports(source) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-review-stub-'));
+    try {
+      const file = path.join(dir, 'ai-review-guard.js');
+      fs.writeFileSync(file, source);
+      return Object.keys(require(file));
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  test('T3 #1925: a base guard that predates #1728 still gets the check-run POSTED, just without the marker', () => {
+    // Sanity: the stub models main's guard. It keeps decideReviewCheck and everything
+    // else, and lacks every export #1728 added (each of which the real guard has).
+    const keys = stubExports(PRE_1728_GUARD);
+    assert.ok(keys.includes('decideReviewCheck'));
+    for (const k of ADDED_BY_1728) {
+      assert.ok(k in real, `${k} is no longer exported by the guard; update ADDED_BY_1728`);
+      assert.ok(!keys.includes(k), `the pre-#1728 stub still exports ${k}`);
+    }
+    for (const [verdict, machinery] of [['ai-review:pass', 'false'], ['ai-review:changes', 'false'], ['ai-review:pass', 'true']]) {
+      const res = runStep(PRE_1728_GUARD, { verdict, machinery });
+      const c = assertPosted(res, verdict, machinery);
+      // The marker is simply absent: the summary is decideReviewCheck's, byte for byte.
+      assert.equal(res.posted.output.summary, c.summary);
+      assert.ok(!res.posted.output.summary.includes('patch-fingerprint:'));
+      // Detected up front, not discovered by calling a non-function and catching it.
+      assert.doesNotMatch(res.stderr, /TypeError/);
+    }
+  });
+
+  test('#1728 invariant: a base guard WITH the helpers still records the marker exactly as intended', () => {
+    const res = runStep(CURRENT_GUARD);
+    const c = assertPosted(res, 'ai-review:pass', 'false');
+    const fp = real.patchFingerprint(res.patch);
+    assert.ok(fp, 'the fixture patch must fingerprint');
+    assert.equal(res.posted.output.summary, `${c.summary}\n\n${real.renderPatchFingerprint(fp)}`);
+    assert.equal(real.parsePatchFingerprint(res.posted.output.summary), fp);
+  });
+
+  test('#1925: a half-present pair (patchFingerprint without renderPatchFingerprint) posts without a marker', () => {
+    const half = reexport('const m = { ...real };\ndelete m.renderPatchFingerprint;\nmodule.exports = m;');
+    const res = runStep(half);
+    const c = assertPosted(res, 'ai-review:pass', 'false');
+    assert.equal(res.posted.output.summary, c.summary);
+    // BOTH helpers are feature-detected; the missing one is never called and caught.
+    assert.doesNotMatch(res.stderr, /TypeError/);
+  });
+
+  test('#1925: a fingerprint helper that THROWS degrades to no marker, never to no check-run', () => {
+    const throwing = reexport('module.exports = { ...real, patchFingerprint() { throw new Error("boom"); } };');
+    const res = runStep(throwing, { verdict: 'ai-review:changes' });
+    const c = assertPosted(res, 'ai-review:changes', 'false');
+    assert.equal(res.posted.output.summary, c.summary);
+  });
+}
+
+// ── #1870 — a `hold:*` label is an INDEPENDENT second witness for the human hold ──
+// docs-lane refuses to arm auto-merge on a hold, but it was the only thing doing so:
+// if that job does not run (permissions gap, cancelled run, or the `docs-lane` label
+// removed, which makes its own `if:` guard false) an earlier arming still stands.
+// `ready-to-merge` is a different workflow, required by branch protection, evaluated
+// on every PR event — constitution invariant 2's "independent second witness".
+
+test('decideStatus: hold:human turns an otherwise-green gate RED', () => {
+  const green = decideStatus({ labels: [PASS, 'feat'], passProvenance: VERIFIED });
+  assert.equal(green.state, 'success', 'control: same PR without a hold is green');
+
+  const s = decideStatus({ labels: [PASS, 'feat', 'hold:human'], passProvenance: VERIFIED });
+  assert.equal(s.state, 'failure');
+  assert.match(s.description, /hold:human/);
+});
+
+test('decideStatus: ANY hold:* holds, not just hold:human', () => {
+  const s = decideStatus({ labels: [PASS, 'hold:legal'], passProvenance: VERIFIED });
+  assert.equal(s.state, 'failure');
+  assert.match(s.description, /hold:legal/);
+});
+
+test('decideStatus: the hold predicate is ANCHORED — a label containing "hold:" mid-string does not gate', () => {
+  // `household-docs` alone does NOT bind the anchor: it has no `hold:` substring, so an
+  // unanchored /hold:/ would pass that test too and the mutation would survive. These
+  // labels DO contain `hold:` and must still be ignored, which only an anchored
+  // pattern achieves.
+  for (const label of ['not-hold:human', 'xhold:legal', 'was-hold:tier', 'household-docs']) {
+    const s = decideStatus({ labels: [PASS, label], passProvenance: VERIFIED });
+    assert.equal(s.state, 'success', `${label} must not gate`);
+  }
+});
+
+test('HOLD_RE stays lock-step with docs-lane.yml\'s hold_pattern (two gates, one predicate)', () => {
+  // #1870 deliberately puts the same predicate in a SECOND gate — that is the point
+  // (an independent witness). Two copies drift, so pin them to each other, the way
+  // OUTWARD_DOC_PATTERN is pinned between the lane and auto-merge-gate.ts.
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const lane = fs.readFileSync(path.join(__dirname, '..', 'workflows', 'docs-lane.yml'), 'utf8');
+  const m = lane.match(/hold_pattern='([^']+)'/);
+  assert.ok(m, 'docs-lane.yml must still define hold_pattern');
+  assert.equal(
+    HOLD_RE.source,
+    m[1],
+    'ready-to-merge and docs-lane must agree on what counts as a hold',
+  );
+});
+
+test('decideStatus: a held PR leaves the awaiting-approval "your turn" queue', () => {
+  // A hold drives statusState to 'failure', and shouldAwaitApproval keys off that, so
+  // the held PR drops out of the human merge queue. That is correct and matches the
+  // existing isDraft case — a PR nobody may merge is not anyone's turn to merge — but
+  // it is an interaction between two functions, so pin it rather than infer it.
+  const held = decideStatus({ labels: [PASS, 'hold:human'], passProvenance: VERIFIED });
+  assert.equal(held.state, 'failure');
+  assert.equal(
+    shouldAwaitApproval({ statusState: held.state, autoMergeArmed: false, openBlockers: [], isDraft: false }),
+    false,
+  );
+
+  const free = decideStatus({ labels: [PASS], passProvenance: VERIFIED });
+  assert.equal(free.state, 'success', 'control: without the hold it IS the human\'s turn');
+  assert.equal(
+    shouldAwaitApproval({ statusState: free.state, autoMergeArmed: false, openBlockers: [], isDraft: false }),
+    true,
+  );
+});
+
+test('decideStatus: hold is reported ahead of a staleness strip (the unactionable-description case)', () => {
+  // Both make it red. The strip says "re-review required", which a held PR can never
+  // satisfy — so the hold, which is what actually blocks, must be the reported reason.
+  const s = decideStatus({ labels: [PASS, 'hold:human'], stalenessStrip: true });
+  assert.equal(s.state, 'failure');
+  assert.match(s.description, /hold:human/);
+  assert.doesNotMatch(s.description, /re-review required/);
+});
+
+test('decideStatus: hold reported ahead of a provenance revert too', () => {
+  const s = decideStatus({ labels: [PASS, 'hold:human'], provenanceRevert: true });
+  assert.equal(s.state, 'failure');
+  assert.match(s.description, /hold:human/);
+});
+
+test('decideStatus: a hold holds even with NO pass at all (it is not a pass-modifier)', () => {
+  const s = decideStatus({ labels: ['hold:human'] });
+  assert.equal(s.state, 'failure');
+  assert.match(s.description, /hold:human/);
+});
+
+test('decideStatus: multiple holds are all named', () => {
+  const s = decideStatus({ labels: [PASS, 'hold:human', 'hold:legal'], passProvenance: VERIFIED });
+  assert.equal(s.state, 'failure');
+  assert.match(s.description, /hold:human/);
+  assert.match(s.description, /hold:legal/);
+});
+
+test('decideStatus: hold does not alter effectiveLabels (it gates, it does not strip)', () => {
+  const s = decideStatus({ labels: [PASS, 'hold:human'], passProvenance: VERIFIED });
+  assert.ok(s.effectiveLabels.includes('hold:human'));
+  assert.ok(s.effectiveLabels.includes(PASS), 'a hold must not strip the pass label');
+});
+
+test('decideStatus: no hold present → behaviour is byte-identical to before #1870', () => {
+  for (const c of [
+    { labels: [PASS, 'feat'], passProvenance: VERIFIED },
+    { labels: [PASS, CHANGES], passProvenance: VERIFIED },
+    { labels: ['feat'] },
+    { labels: [PASS], stalenessStrip: true },
+    { labels: [PASS], provenanceRevert: true },
+  ]) {
+    const s = decideStatus(c);
+    assert.doesNotMatch(s.description, /hold/, 'no hold label ⇒ no hold wording');
+  }
+});
+// <<< minspec:managed:ai-review-guard-test <<<

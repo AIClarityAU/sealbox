@@ -39,8 +39,10 @@
 # NOTE: `ai-review:changes` is not provenance-guarded — a forged `changes` can
 # only make the gate stricter (fail), never falsely green, so it is fail-safe.
 #
-# ── REQUIRED MANUAL STEP 1 — reviewer identity (provenance) ──────────────────
-# Set the repo/org Actions *variable* `AI_REVIEW_BOT_LOGINS` to the login(s) that
+# ── OPTIONAL — reviewer identity override (provenance) ───────────────────────
+# Defaults to `minspec-sdd[bot]`, the shipped reviewer identity (DR-054), so a fresh
+# repo's provenance gate is configured out of the box. Override ONLY if you run your
+# own review App: set the repo/org Actions *variable* `AI_REVIEW_BOT_LOGINS` to the login(s) that
 # are allowed to apply `ai-review:*` labels — Settings → Secrets and variables →
 # Actions → Variables → New repository variable. Value is comma/space separated:
 #   - a bot USER account login, e.g. `minspec-review-bot`
@@ -96,7 +98,7 @@ permissions:
   contents: read         # checkout the trusted base commit + read the head commit's timestamp
 
 jobs:
-  ready-to-merge:
+  gate:
     runs-on: ubuntu-latest
     steps:
       # ── Fail closed if we cannot pin the checkout to a trusted base commit ──
@@ -130,9 +132,16 @@ jobs:
         env:
           # Built-in token; scoped by the permissions block above.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Allowlist of logins permitted to apply ai-review:* labels. Configured
-          # by the owner (see REQUIRED MANUAL STEP 1). Empty ⇒ fail closed.
-          AI_REVIEW_BOT_LOGINS: ${{ vars.AI_REVIEW_BOT_LOGINS }}
+          # Allowlist of logins permitted to apply ai-review:* labels. Defaults to
+          # the shipped reviewer identity; see the OPTIONAL override section above.
+          # Empty ⇒ fail closed (the gate stays red, it does not go quiet).
+          # DR-054: the reviewer identity is a PRODUCT CONSTANT, not per-deployment
+          # config — a public identifier like an OAuth client_id. Shipping it as the
+          # default removes the mandatory per-repo setup step (#597) that left a fresh
+          # repo's provenance gate unconfigured and silently unenforced. The variable
+          # is retained ONLY as the enterprise override, for a customer running their
+          # own App under their own bot login.
+          AI_REVIEW_BOT_LOGINS: ${{ vars.AI_REVIEW_BOT_LOGINS || 'minspec-sdd[bot]' }}
         with:
           script: |
             const path = require('path');
@@ -342,6 +351,35 @@ jobs:
             // turn. Best-effort: the commit status above is the load-bearing signal,
             // this label is a convenience filter on top of it and must never fail the gate.
             try {
+              // ── #1247 — resolve declared blockers to the still-OPEN subset ──
+              // The PR body is the declaration ("Blocked by #1225"); GitHub has no
+              // native blocked-by edge for PRs, so the body IS the source and the
+              // grammar is deliberately strict (see parseBlockedBy).
+              const declaredBlockers = guard.parseBlockedBy(pr.body);
+              const openBlockers = [];
+              for (const n of declaredBlockers) {
+                try {
+                  const { data: ref } = await github.rest.issues.get({
+                    owner,
+                    repo,
+                    issue_number: n,
+                  });
+                  if (ref.state === 'open') openBlockers.push(n);
+                } catch (e) {
+                  // UNRESOLVABLE ⇒ TREAT AS OPEN. A signpost that cannot verify must
+                  // not claim "your turn" (never-wrong). The costs are asymmetric: a
+                  // spurious `blocked-by` costs one glance at the PR, a false
+                  // `awaiting-approval` costs a merge that should not have happened.
+                  // Deliberately NOT swallowed silently — it is warned, so a
+                  // permanently-unresolvable ref is visible in the run log rather than
+                  // parking the PR forever with no stated reason (invariant #2).
+                  core.warning(
+                    `blocked-by: could not resolve #${n} (${e.status ?? e.message}) — treating as OPEN`,
+                  );
+                  openBlockers.push(n);
+                }
+              }
+
               // `pr` is the `pull_request` webhook payload, which always carries
               // `auto_merge` (null when unarmed, an object when armed) — so
               // Boolean(pr.auto_merge) is well-defined on every trigger this workflow
@@ -351,7 +389,10 @@ jobs:
               const wantAwait = guard.shouldAwaitApproval({
                 statusState: status.state,
                 autoMergeArmed: Boolean(pr.auto_merge),
+                openBlockers,
+                isDraft: Boolean(pr.draft),
               });
+              const wantBlocked = guard.shouldMarkBlockedBy({ openBlockers });
               if (wantAwait) {
                 await github.rest.issues.addLabels({
                   owner,
@@ -371,8 +412,31 @@ jobs:
                     if (!guard.isBenignRemovalError(e.status)) throw e;
                   });
               }
+
+              // Same owner, same event, one decision source — so `blocked-by` and
+              // `awaiting-approval` can never both sit on a PR.
+              if (wantBlocked) {
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: pr.number,
+                  labels: [guard.BLOCKED_BY],
+                });
+                core.info(`blocked-by: open blocker(s) ${openBlockers.map((n) => '#' + n).join(', ')}`);
+              } else {
+                await github.rest.issues
+                  .removeLabel({
+                    owner,
+                    repo,
+                    issue_number: pr.number,
+                    name: guard.BLOCKED_BY,
+                  })
+                  .catch((e) => {
+                    if (!guard.isBenignRemovalError(e.status)) throw e;
+                  });
+              }
             } catch (e) {
-              core.warning(`could not sync ${guard.AWAITING_APPROVAL}: ${e.message}`);
+              core.warning(`could not sync ${guard.AWAITING_APPROVAL}/${guard.BLOCKED_BY}: ${e.message}`);
             }
 
             // ── Cleanup + audit trail for the revert/strip guards ──────────
@@ -418,8 +482,9 @@ jobs:
                   `**\`ai-review:pass\` reverted — provenance check (#397).**\n\n` +
                   `${provenance.reason}. The \`ready-to-merge\` gate is red until an ` +
                   `allowlisted reviewer identity re-applies it after a real review.\n\n` +
-                  `Owner: set the \`AI_REVIEW_BOT_LOGINS\` Actions variable to your ` +
-                  `reviewer identity (see \`.github/workflows/ready-to-merge.yml\`).`,
+                  `Owner: the allowlist defaults to \`minspec-sdd[bot]\`. If you run ` +
+                  `your own review App, set the \`AI_REVIEW_BOT_LOGINS\` Actions variable ` +
+                  `to its login (see \`.github/workflows/ready-to-merge.yml\`).`,
               );
               await removePass();
             } else if (staleness.strip) {
