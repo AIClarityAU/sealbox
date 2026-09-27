@@ -1,6 +1,6 @@
 ---
 id: DR-048
-status: proposed
+status: superseded
 date: 2026-07-16
 epic: EPIC-007  # Agent Execute / SealBox Extension
 tier: T3
@@ -17,6 +17,12 @@ triggered_by: "Session 2026-07-16 sizing the SealBox token-savings engine on mea
 > **No code** — SealBox is unbuilt (no `src/`), SPEC-002 in Specify phase, the broker is a
 > **Layer-2** feature (CL-9/CL-15) that ships *after* v1's manual Layer-1. This DR **extends**
 > DR-047; it does not revisit or loosen DR-047's live-CC wall.
+
+> **Status: superseded by the founder's 2026-08-01 SealBox shelving decision (sealbox#35; MinSpecPro DR-075 §2), recorded 2026-09-27.**
+> SealBox is shelved indefinitely — an enterprise buyer needs a sales motion a solo founder with
+> a day job cannot run — so this delegation-engine design is parked, not built. sealbox#35 is
+> explicit that this DR "stays as the deferred design": preserved for a future revival as OSS
+> composing on `anthropics/sandbox-runtime`, never restarted as a revenue product.
 
 ## Context
 
@@ -434,3 +440,13 @@ judge — with Scrooge recommending when present), disclose the
 actually-run model per sub-task as a T0 invariant authored before the picker, keep the live-CC
 surface advise-only, and locate the honest ≥25% headline on the autonomous surface only — with the
 positioning, subscription-`$`, baseline/risk, and team-visibility calls surfaced to the founder.
+
+## Status
+
+**Superseded**, 2026-09-27 — by the founder's 2026-08-01 SealBox shelving decision (sealbox#35; MinSpecPro DR-075 §2).
+
+SealBox itself is shelved indefinitely, so this delegation-engine design is parked rather than
+scheduled for work. sealbox#35 is explicit that this DR "stays as the deferred design," so it
+remains on record for a future revival: OSS composing on `anthropics/sandbox-runtime`, never
+restarted as a revenue product (MinSpecPro DR-075 §2, "Portfolio monetization is closed ...
+Sealbox stays shelved").
