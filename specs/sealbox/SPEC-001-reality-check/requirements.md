@@ -2,7 +2,8 @@
 id: SPEC-001
 type: requirements
 # 🔒 Once approved, hash-locked: approved bytes recorded in .minspec/approvals.json[SPEC-001].specHash. ANY edit voids approval (hash → stale) — re-run "MinSpec: Approve Spec". DR-012.
-status: specifying
+status: superseded
+superseded-by: MinSpecPro SPEC-016
 tier: T3
 product: sealbox
 epic: EPIC-007  # Agent Execute Extension
@@ -11,6 +12,21 @@ relates_to: [SPEC-013, SPEC-010, SPEC-011]
 ---
 
 # MinSpec — Reality-Check Reviewer + Round-Table (Slices 2-3)
+
+## Supersession record (2026-09-29)
+
+**This spec is superseded by MinSpecPro's
+[SPEC-016](https://github.com/AIClarityAU/minspec/blob/main/specs/agent-execute/SPEC-016-reality-check/requirements.md)
+and should not be planned or implemented.** It is a leftover artifact of the repo split
+(DR-015 placed the agent-execute extension in this standalone `sealbox` repo) — the body
+below is byte-for-byte the same design as MinSpecPro's own SPEC-016 (only the relative
+doc links were rewritten to absolute GitHub URLs when the content was copied out), and
+that original was approved 2026-06-04 and is `status: implementing` there. This copy was
+never itself approved in this repo (no `.minspec/approvals/` sidecar and no
+`.minspec/approvals.json` entry exist for SPEC-001), so withdrawal is free and loses no
+sign-off. Founder instruction (chat, 2026-09-27): "go ahead and close any other
+approvables in sealbox/scrooge that we're not going to use," confirming this pair by name.
+Nothing below this section is normative any more; it is kept as the historical record.
 
 > **Slices 2-3 of [DR-029](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-029.md) (§8).** The **Tier-1**
 > amplifier over SPEC-013's deterministic floor: an independent adversarial

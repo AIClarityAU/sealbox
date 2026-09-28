@@ -1,10 +1,16 @@
 ---
 id: SPEC-001
 type: tasks
-status: specifying
+status: superseded
+superseded-by: MinSpecPro SPEC-016
 product: sealbox
 epic: EPIC-007  # Agent Execute Extension
 ---
+
+**Superseded** — see the Supersession record in
+[requirements.md](requirements.md) (superseded by MinSpecPro's SPEC-016; leftover
+artifact of the repo split, never approved in this repo). This scaffold was never
+filled in (no task was ever added).
 
 # SPEC-001 — Task Breakdown
 
