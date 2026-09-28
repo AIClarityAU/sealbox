@@ -2,7 +2,8 @@
 id: SPEC-002
 type: requirements
 # 🔒 Once approved, hash-locked: approved bytes recorded in .minspec/approvals.json[SPEC-002].specHash. ANY edit voids approval (hash → stale) — re-run "MinSpec: Approve Spec". DR-012.
-status: specifying
+status: superseded
+superseded-by: MinSpecPro SPEC-019
 tier: T4
 product: sealbox
 epic: EPIC-007  # Agent Execute Extension
@@ -11,6 +12,21 @@ relates_to: [SPEC-001, DR-031]  # SPEC-001 reality-check reviewer ships in this 
 ---
 
 # Agent Execute — Layer-2 Execution Substrate (control plane + credential-free exec plane)
+
+## Supersession record (2026-09-29)
+
+**This spec is superseded by MinSpecPro's
+[SPEC-019](https://github.com/AIClarityAU/minspec/blob/main/specs/agent-execute/SPEC-019-execution-substrate/requirements.md)
+and should not be planned or implemented.** It is a leftover artifact of the repo split
+(DR-015 placed the agent-execute extension in this standalone `sealbox` repo) — the body
+below is byte-for-byte the same design as MinSpecPro's own SPEC-019 (only the relative
+doc links were rewritten to absolute GitHub URLs when the content was copied out), and
+that original was approved 2026-06-29 and is `status: implementing` there. This copy was
+never itself approved in this repo (no `.minspec/approvals/` sidecar and no
+`.minspec/approvals.json` entry exist for SPEC-002), so withdrawal is free and loses no
+sign-off. Founder instruction (chat, 2026-09-27): "go ahead and close any other
+approvables in sealbox/scrooge that we're not going to use," confirming this pair by name.
+Nothing below this section is normative any more; it is kept as the historical record.
 
 > **The Layer-2 substrate of [DR-017](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-017.md), realising
 > [DR-008](https://github.com/AIClarityAU/minspec/blob/main/docs/decisions/DR-008.md)'s no-credential execution isolation in the
