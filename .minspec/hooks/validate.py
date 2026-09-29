@@ -5,6 +5,7 @@
 
 Language-agnostic twin of the Node validate-frontmatter core FATAL checks:
   - specs/**/*.md must have `id: SPEC-NNN` frontmatter
+  - docs/decisions/DR-*.md must have `id: DR-NNN` frontmatter
   - docs/domain/*.md must have `type: domain` frontmatter
 
 Frontmatter parsing mirrors the Node validator exactly (first --- ... --- block,
@@ -18,6 +19,7 @@ import sys
 
 FM_RE = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
 SPEC_ID_RE = re.compile(r"^SPEC-\d+$")
+DR_ID_RE = re.compile(r"^DR-\d+$")
 
 
 def repo_root():
@@ -89,7 +91,11 @@ def main():
         targets = staged_files(root)
         reader = lambda rel: staged_content(root, rel)
     else:
-        targets = all_md(root, "specs") + all_md(root, os.path.join("docs", "domain"))
+        targets = (
+            all_md(root, "specs")
+            + all_md(root, os.path.join("docs", "decisions"))
+            + all_md(root, os.path.join("docs", "domain"))
+        )
         def reader(rel):
             try:
                 with open(os.path.join(root, rel), "r", encoding="utf-8") as fh:
@@ -103,7 +109,13 @@ def main():
         norm = rel.replace(os.sep, "/")
         is_spec = norm.startswith("specs/") and norm.endswith(".md")
         is_domain = norm.startswith("docs/domain/") and norm.endswith(".md")
-        if not (is_spec or is_domain):
+        # A decision record, not the register's INDEX.md (a listing with no id).
+        is_dr = (
+            norm.startswith("docs/decisions/")
+            and norm.endswith(".md")
+            and os.path.basename(norm).startswith("DR-")
+        )
+        if not (is_spec or is_dr or is_domain):
             continue
 
         content = reader(rel)
@@ -118,6 +130,14 @@ def main():
             if not SPEC_ID_RE.match(spec_id):
                 sys.stderr.write(
                     "FAIL " + norm + ": missing or invalid `id: SPEC-NNN` frontmatter\n"
+                )
+                errors += 1
+
+        if is_dr:
+            dr_id = fm.get("id", "").split("#", 1)[0].strip()
+            if not DR_ID_RE.match(dr_id):
+                sys.stderr.write(
+                    "FAIL " + norm + ": missing or invalid `id: DR-NNN` frontmatter\n"
                 )
                 errors += 1
 

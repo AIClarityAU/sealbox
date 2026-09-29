@@ -266,11 +266,23 @@ jobs:
       # if every required role passed. CLAUDE_CODE_OAUTH_TOKEN is the INFERENCE
       # credential for `claude -p` here — the agent still has no actionable tool.
       # The App token is intentionally ABSENT from this step.
+      #
+      # ANTHROPIC_API_KEY / AI_REVIEW_FAILOVER are the quota-failover pair that
+      # review-branch.sh reads (`AI_REVIEW_FAILOVER == payg && -n ANTHROPIC_API_KEY`).
+      # Both are the SAME KIND of credential as the OAuth token above — inference
+      # only, no actionable tool — so this does not widen the step's authority. They
+      # are passed together deliberately: the script's condition needs both, so
+      # setting the repo variable without forwarding the secret (or the reverse)
+      # leaves the failover configured-looking but inert, which is the failure this
+      # wiring exists to prevent. With neither set, the expressions render empty and
+      # the default `wait` behaviour is unchanged.
       - name: Independent review → decide combined label
         id: review
         if: steps.guard.outputs.configured == 'true'
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AI_REVIEW_FAILOVER: ${{ vars.AI_REVIEW_FAILOVER }}
           AI_REVIEW_COVERAGE: ${{ vars.AI_REVIEW_COVERAGE }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -295,7 +307,14 @@ jobs:
           # interpolation). If the fetch fails, the diff is empty → fail closed.
           git fetch --no-tags --quiet origin "$HEAD" 2>/dev/null || true
 
-          extract_block() { sed -n '/REVIEW_VERDICT_BEGIN/,/REVIEW_VERDICT_END/p'; }
+          # Marker = the token ALONE ON A LINE, the SAME predicate review-decide.sh
+          # uses to decide the label (#1157). Display and decision must agree: when
+          # this extractor matched a marker the decider did not (or vice versa), the
+          # rendered block could read `verdict: pass` under an `ai-review:changes`
+          # label, and nothing detected the contradiction. Measured on #1209.
+          extract_block() {
+            sed -n '/^[[:space:]]*REVIEW_VERDICT_BEGIN[[:space:]]*$/,/^[[:space:]]*REVIEW_VERDICT_END[[:space:]]*$/p'
+          }
 
           # Scrub any inference-token value or `sk-ant-*` secret to `***` before the
           # reviewer text can reach the PR comment. Defeats a prompt-injected diff
@@ -306,6 +325,16 @@ jobs:
             sed -E 's/sk-ant-[A-Za-z0-9_-]+/***/g' \
               | if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
                   awk -v tok="$CLAUDE_CODE_OAUTH_TOKEN" \
+                    '{ while ((p=index($0,tok))>0) $0=substr($0,1,p-1) "***" substr($0,p+length(tok)); print }'
+                else
+                  cat
+                fi \
+              | if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+                  # The sed above already catches today's `sk-ant-*` shape. This pass
+                  # does not trust that shape: it matches the key's LITERAL value, so
+                  # a future key format stays redacted without anyone remembering to
+                  # update a regex. Same treatment the OAuth token gets, same reason.
+                  awk -v tok="$ANTHROPIC_API_KEY" \
                     '{ while ((p=index($0,tok))>0) $0=substr($0,1,p-1) "***" substr($0,p+length(tok)); print }'
                 else
                   cat
@@ -334,18 +363,49 @@ jobs:
           if [ "$CHANGED_OK" != "yes" ]; then
             SELF_EDIT=yes
             SELF_EDIT_KIND=indeterminate
-          elif printf '%s\n' "$CHANGED" | grep -qE '^(\.github/|scripts/)'; then
+          # MACHINERY_PATHS_RE — the machinery path set (MinSpec #1284). Gate-ness is a property
+          # of what the code DOES, not which directory it lives in: every entry here is code that
+          # decides whether some other change is allowed, so it cannot certify itself.
+          #
+          # UNIVERSAL — present in any repo that scaffolds this stack:
+          #   .github/   — the review workflows and their scripts
+          #   scripts/   — dispatch, review, remediation, the lease
+          #
+          # INHERITED FROM MINSPEC — the remaining alternations name files in MinSpec's own
+          # repo. Unless this repo happens to have files at those exact paths they never match,
+          # and they are carried only so the pattern stays identical to the one MinSpec ships:
+          #   .githooks/             — MinSpec's own pre-commit / pre-push / commit-msg gates
+          #   template-registry.ts   — generates the .minspec/hooks/pre-commit gate
+          #   ci-review-templates.ts — holds the verbatim copies of this workflow and its
+          #                            scripts that MinSpec ships downstream
+          #
+          # ALSO CARRIED, NOT MINSPEC-SPECIFIC — generic CI-provider / git-hook directories that
+          # may or may not exist here; kept so this pattern cannot silently narrow relative to
+          # the one MinSpec ships:
+          #   .circleci/  — CircleCI pipeline config
+          #   .buildkite/ — Buildkite pipeline config
+          #   .husky/     — husky-managed git hooks (same arbitrary-shell-on-commit surface as .githooks/)
+          #
+          # MEMBERSHIP TEST for anything added here: does this code decide whether some other
+          # change is allowed — directly, or by generating the thing that decides? If yes it
+          # cannot certify itself, and it belongs in this set.
+          #
+          # NO LOCAL TEST GUARDS THIS PATTERN. MinSpec's own repo has a test that parses the
+          # line below out and executes it against a path table, but that test is not part of
+          # the scaffolded stack, so here the line is unverified — change it and nothing in
+          # this repo will tell you it stopped classifying correctly.
+          elif printf '%s\n' "$CHANGED" | grep -qE '^\.github/|^scripts/|^\.githooks/|^\.circleci/|^\.buildkite/|^\.husky/|^packages/minspec/src/lib/(template-registry|ci-review-templates)\.ts$'; then
             SELF_EDIT=yes
             SELF_EDIT_KIND=machinery
           fi
 
-          # ── reviewer role (always) ──
-          REVIEWER_OUT="$(bash scripts/review-branch.sh "$BASE" "$HEAD" --role reviewer || true)"
-          REVIEWER_LABEL="$(printf '%s\n' "$REVIEWER_OUT" | bash scripts/review-decide.sh || true)"
-          REVIEWER_BLOCK="$(printf '%s\n' "$REVIEWER_OUT" | extract_block | redact)"
-          [ -z "$REVIEWER_BLOCK" ] && REVIEWER_BLOCK="(reviewer emitted no verdict block — fail-closed to changes)"
-
-          # ── security role (runs on ANY code change; skipped only for docs-only PRs) ──
+          # ── which voters are REQUIRED (decided before any of them runs) ──
+          # Separating "who runs" from "run them" is what lets the panel run CONCURRENTLY
+          # below. The predicates themselves are unchanged.
+          #
+          # reviewer — always.
+          #
+          # security — runs on ANY code change; skipped only for docs-only PRs.
           # Agnostic — NO hardcoded monorepo path. Security flaws live in any executable
           # surface (sites/*.js, scripts/, .github/, config, packages/, …), not just
           # `packages/`, and the security lens has the SAME scope as the reviewer over
@@ -353,42 +413,126 @@ jobs:
           # docs/approvables). Durable per-project code-surface detection (init scans the
           # file list, dev confirms) is #453 / SPEC-033 D-4; this is the agnostic interim.
           SECURITY_REQUIRED=no
-          SECURITY_LABEL=""
-          SECURITY_BLOCK=""
           if [ "$CHANGED_OK" = "yes" ] && printf '%s\n' "$CHANGED" | grep -qvE '\.md$'; then
             SECURITY_REQUIRED=yes
-            SECURITY_OUT="$(bash scripts/review-branch.sh "$BASE" "$HEAD" --role security || true)"
+          fi
+          # architect (panel only) — design-fit / scope / contracts / missing-DR lens.
+          # Always-on in panel: design review applies to specs AND code, so it is NOT
+          # gated on the code-vs-docs split the security role uses.
+          # skeptic (panel only) — evidence discipline: unproven done/fixed/implemented
+          # claims, false status fields, hollow tests.
+          ARCHITECT_REQUIRED=no
+          SKEPTIC_REQUIRED=no
+          if [ "$COVERAGE" = "panel" ]; then
+            ARCHITECT_REQUIRED=yes
+            SKEPTIC_REQUIRED=yes
+          fi
+
+          # ── run every required voter CONCURRENTLY ──
+          # These were sequential, so wall-clock was the SUM of four independent
+          # `claude -p` calls — 10m07s for a 3-line docs diff on #1017, with each voter
+          # idle while the others ran. The voters share no state and their verdicts are
+          # combined only afterwards, so nothing ordered them; the cost was accidental.
+          #
+          # Deliberately NOT solved by dropping voters: fewer lenses is a weaker gate,
+          # and every one of them has caught a real defect this week. Concurrency buys
+          # the latency back while keeping the panel whole.
+          #
+          # Each voter writes its own file (no interleaved stdout), and each is already
+          # `|| true` so one failing voter cannot abort the others or the step.
+          VOTE_DIR="$(mktemp -d)"
+          # Voter stdout is the VERDICT (parsed); stderr is DIAGNOSTICS (quota vs
+          # genuine-crash messages, the agent-output dump). They must not be merged
+          # into one stream — stderr text in $1.out would be fed to review-decide.sh —
+          # but stderr must not be discarded either: `2>/dev/null` silently deleted the
+          # only evidence of WHY a voter failed, so a blocked verdict became
+          # undiagnosable after the fact. Keep them separate and both visible: stdout
+          # to the vote file, stderr to the Actions log, prefixed so parallel voters'
+          # lines stay attributable when they interleave.
+          run_voter() {  # $1 = role
+            bash scripts/review-branch.sh "$BASE" "$HEAD" --role "$1" \
+              > "$VOTE_DIR/$1.out" 2> "$VOTE_DIR/$1.err" || true
+          }
+          # `if` rather than `cond && { … }`: this step inherits `-e` from the Actions
+          # default shell (`set -uo pipefail` does not clear it), and a false `&&` list
+          # is only exempt from `-e` by a subtlety not worth resting a merge gate on.
+          VOTER_PIDS=""
+          # STAGGER the starts. Launching all four in the same instant made one voter
+          # come back `blocked` on the very first parallel run (#1086: reviewer blocked
+          # while security + architect + skeptic all passed — three simultaneous
+          # successes rule out a token-quota outage and point at a burst limit).
+          # A few seconds between starts costs almost nothing against a ~2.5min voter,
+          # and the combine precedence is `changes > blocked > pass`, so ONE blocked
+          # voter blocks the whole PR: a cheap desync is worth far more than the seconds.
+          VOTER_STAGGER_SECS="${VOTER_STAGGER_SECS:-5}"
+          run_voter reviewer & VOTER_PIDS="$VOTER_PIDS $!"
+          if [ "$SECURITY_REQUIRED" = yes ]; then
+            sleep "$VOTER_STAGGER_SECS"
+            run_voter security & VOTER_PIDS="$VOTER_PIDS $!"
+          fi
+          if [ "$ARCHITECT_REQUIRED" = yes ]; then
+            sleep "$VOTER_STAGGER_SECS"
+            run_voter architect & VOTER_PIDS="$VOTER_PIDS $!"
+          fi
+          if [ "$SKEPTIC_REQUIRED" = yes ]; then
+            sleep "$VOTER_STAGGER_SECS"
+            run_voter skeptic & VOTER_PIDS="$VOTER_PIDS $!"
+          fi
+          # Wait for ALL of them. A voter that dies still leaves an (empty) file, which
+          # the fail-closed reads below turn into `changes` — never a silent pass.
+          for p in $VOTER_PIDS; do wait "$p" || true; done
+
+          # Replay each voter's diagnostics AFTER the barrier, attributed and grouped.
+          # Sequentially, review-branch.sh's stderr (quota-vs-genuine-crash messages,
+          # the agent-output dump) landed in the Actions log by default. Running the
+          # voters concurrently would interleave those streams unreadably, so they are
+          # captured per voter and replayed here — visible and attributable, instead of
+          # discarded. Losing them made a `blocked` verdict undiagnosable after the
+          # fact: the classifier's reason could not be checked against what the CLI
+          # actually said.
+          for role in reviewer security architect skeptic; do
+            if [ -s "$VOTE_DIR/$role.err" ]; then
+              echo "::group::voter stderr — $role"
+              cat "$VOTE_DIR/$role.err"
+              echo "::endgroup::"
+            fi
+          done
+
+          # ── collect verdicts (identical fail-closed handling to the sequential form) ──
+          read_vote() { [ -f "$VOTE_DIR/$1.out" ] && cat "$VOTE_DIR/$1.out" || true; }
+
+          REVIEWER_OUT="$(read_vote reviewer)"
+          REVIEWER_LABEL="$(printf '%s\n' "$REVIEWER_OUT" | bash scripts/review-decide.sh || true)"
+          REVIEWER_BLOCK="$(printf '%s\n' "$REVIEWER_OUT" | extract_block | redact)"
+          [ -z "$REVIEWER_BLOCK" ] && REVIEWER_BLOCK="(reviewer emitted no verdict block — fail-closed to changes)"
+
+          SECURITY_LABEL=""
+          SECURITY_BLOCK=""
+          if [ "$SECURITY_REQUIRED" = yes ]; then
+            SECURITY_OUT="$(read_vote security)"
             SECURITY_LABEL="$(printf '%s\n' "$SECURITY_OUT" | bash scripts/review-decide.sh || true)"
             SECURITY_BLOCK="$(printf '%s\n' "$SECURITY_OUT" | extract_block | redact)"
             [ -z "$SECURITY_BLOCK" ] && SECURITY_BLOCK="(security reviewer emitted no verdict block — fail-closed to changes)"
           fi
 
-          # ── architect role (panel coverage only) — design-fit / scope / contracts /
-          #    missing-DR lens. Always-on in panel: design review applies to specs AND
-          #    code, so it is NOT gated on the code-vs-docs split the security role uses.
-          ARCHITECT_REQUIRED=no
           ARCHITECT_LABEL=""
           ARCHITECT_BLOCK=""
-          if [ "$COVERAGE" = "panel" ]; then
-            ARCHITECT_REQUIRED=yes
-            ARCHITECT_OUT="$(bash scripts/review-branch.sh "$BASE" "$HEAD" --role architect || true)"
+          if [ "$ARCHITECT_REQUIRED" = yes ]; then
+            ARCHITECT_OUT="$(read_vote architect)"
             ARCHITECT_LABEL="$(printf '%s\n' "$ARCHITECT_OUT" | bash scripts/review-decide.sh || true)"
             ARCHITECT_BLOCK="$(printf '%s\n' "$ARCHITECT_OUT" | extract_block | redact)"
             [ -z "$ARCHITECT_BLOCK" ] && ARCHITECT_BLOCK="(architect emitted no verdict block — fail-closed to changes)"
           fi
 
-          # ── skeptic role (panel coverage only) — evidence discipline: unproven
-          #    done/fixed/implemented claims, false status fields, hollow tests. ──
-          SKEPTIC_REQUIRED=no
           SKEPTIC_LABEL=""
           SKEPTIC_BLOCK=""
-          if [ "$COVERAGE" = "panel" ]; then
-            SKEPTIC_REQUIRED=yes
-            SKEPTIC_OUT="$(bash scripts/review-branch.sh "$BASE" "$HEAD" --role skeptic || true)"
+          if [ "$SKEPTIC_REQUIRED" = yes ]; then
+            SKEPTIC_OUT="$(read_vote skeptic)"
             SKEPTIC_LABEL="$(printf '%s\n' "$SKEPTIC_OUT" | bash scripts/review-decide.sh || true)"
             SKEPTIC_BLOCK="$(printf '%s\n' "$SKEPTIC_OUT" | extract_block | redact)"
             [ -z "$SKEPTIC_BLOCK" ] && SKEPTIC_BLOCK="(skeptic emitted no verdict block — fail-closed to changes)"
           fi
+          rm -rf "$VOTE_DIR"
 
           # ── combine (N-voter panel): pass ONLY if EVERY required voter passed.
           #    Precedence is changes > blocked > pass: a real `changes` from ANY voter
@@ -400,11 +544,39 @@ jobs:
           #    changes" and hide the real, fixable cause). reviewer is always required;
           #    security when code changed; architect + skeptic under `panel` coverage.
           #    Each REQUIRED voter contributes a "req:label" pair; unrequired voters
-          #    (req=no) are skipped. Empty/garbled label → the `*)` arm → changes
-          #    (fail closed). (Machinery PRs are forced to changes by the self-edit
-          #    override below regardless, so a blocked voter there yields to it.) ──
+          #    (req=no) are skipped. An empty or unrecognised label is NOT an opinion
+          #    about the code: the `*)` arm sets ANY_UNREPORTED, which joins ANY_BLOCKED
+          #    in the second branch below → `ai-review:blocked`. Still fail closed (an
+          #    unreported voter can never reach `pass`), but retry-able instead of a
+          #    fabricated objection (#1234).
+          #    Machinery PRs are NOT forced to changes: the self-edit override below
+          #    fires only for SELF_EDIT_KIND=indeterminate (#596), so a machinery PR
+          #    keeps whatever this block decided — `blocked` included — and its merge
+          #    hold is carried separately by the `machinery-review-required` check and
+          #    the absent SHA-bound pass witness, plus `needs-human-review` when the
+          #    verdict is pass/changes. A `blocked` machinery PR does NOT get that
+          #    label: shouldSummonHumanReview returns on `label === BLOCKED` BEFORE
+          #    the isMachinery arm (ai-review-guard.js:889-890), leaving it to
+          #    `ai-review-retry` first. ──
           FINAL="ai-review:pass"
+          # #1234 — an ABSENT voter and a voter that OBJECTED are different events and
+          # are no longer collapsed. Previously both fell to the `*)` arm and set
+          # FINAL=changes, and ANY_BLOCKED was then discarded because it was promoted
+          # only `if FINAL = pass`. Two consequences, both measured on #1675:
+          #
+          #   • one flaky voter outvoted three explicit passes, with ZERO findings
+          #     anywhere, and the PR read `ai-review:changes` — "the reviewer read your
+          #     code and wants changes", which nobody had said;
+          #   • because the label was `changes` and not `blocked`, ai-review-retry never
+          #     selected it, so the outage was terminal instead of retry-able. Three
+          #     consecutive runs failed a DIFFERENT voter each time (2026-08-24).
+          #
+          # Precedence now: a real objection still wins (an outage must never HIDE a
+          # finding), but an outage no longer manufactures one.
+          # >>> verdict-combine (executed verbatim by ai-review-verdict-combine.test.ts)
           ANY_BLOCKED=no
+          ANY_CHANGES=no
+          ANY_UNREPORTED=no
           for pair in \
               "yes:${REVIEWER_LABEL}" \
               "${SECURITY_REQUIRED}:${SECURITY_LABEL}" \
@@ -414,14 +586,21 @@ jobs:
             lbl="${pair#*:}"
             [ "$req" = "yes" ] || continue
             case "$lbl" in
-              ai-review:pass) ;;
+              ai-review:pass)    ;;
               ai-review:blocked) ANY_BLOCKED=yes ;;
-              *) FINAL="ai-review:changes" ;;
+              ai-review:changes) ANY_CHANGES=yes ;;
+              # Empty or unrecognised: the voter did not report. NOT an opinion about
+              # the code — it is the same class as `blocked`, and fails closed the same
+              # way (never `pass`), but stays retry-able.
+              *)                 ANY_UNREPORTED=yes ;;
             esac
           done
-          if [ "$FINAL" = "ai-review:pass" ] && [ "$ANY_BLOCKED" = "yes" ]; then
+          if [ "$ANY_CHANGES" = "yes" ]; then
+            FINAL="ai-review:changes"
+          elif [ "$ANY_BLOCKED" = "yes" ] || [ "$ANY_UNREPORTED" = "yes" ]; then
             FINAL="ai-review:blocked"
           fi
+          # <<< verdict-combine
 
           # ── self-edit handling (fail closed on MERGE, #596-disambiguated) ──
           #    A PR touching the review machinery, or one whose changed set could not
@@ -474,7 +653,26 @@ jobs:
               echo "> 1. **Wait** for the quota window to reset — the retry workflow re-reviews automatically."
               echo "> 2. **Fail over to PAYG API** — set repo variable \`AI_REVIEW_FAILOVER=payg\` + secret \`ANTHROPIC_API_KEY\`; re-runs then use pay-as-you-go instead of the subscription quota."
               echo "> 3. Re-run the \`ai-review\` workflow manually once quota is back."
-              det=$(printf '%s\n' "$REVIEWER_OUT" | sed -n '/REVIEW_UNAVAILABLE_BEGIN/,/REVIEW_UNAVAILABLE_END/p' | redact)
+              # #1204 — PERSIST the stated reset time as a machine-readable marker so the
+              # retry can schedule against it instead of polling blindly. The CLI states
+              # it ("resets 12:50am (Australia/Sydney)") and we previously discarded it,
+              # which on #1602 cost six attempts across 4h21m, five of them futile at the
+              # moment they fired. A parse failure emits NO marker, and the retry then
+              # falls back to its normal cadence — never to "wait forever".
+              RESET_ISO=$(printf '%s' "$REVIEWER_OUT" | node -e '
+                const fs = require("fs");
+                const { parseResetInstant } = require("./.github/scripts/ai-review-guard.js");
+                let t = ""; try { t = fs.readFileSync(0, "utf-8"); } catch {}
+                const iso = parseResetInstant(t, Date.now());
+                if (iso) process.stdout.write(iso);
+              ' 2>/dev/null || true)
+              if [ -n "$RESET_ISO" ]; then
+                echo ">"
+                echo "> ⏱️ Reviewer stated the window resets at **$RESET_ISO**; the retry will not spend a token before then."
+                echo
+                echo "<!-- ai-review-reset: $RESET_ISO -->"
+              fi
+              det=$(printf '%s\n' "$REVIEWER_OUT" | sed -n '/^[[:space:]]*REVIEW_UNAVAILABLE_BEGIN[[:space:]]*$/,/^[[:space:]]*REVIEW_UNAVAILABLE_END[[:space:]]*$/p' | redact)
               if [ -n "$det" ]; then
                 echo
                 echo "<details><summary>reviewer output (redacted — may include the reset time)</summary>"
@@ -532,15 +730,48 @@ jobs:
               # reduced gate that was invisible on the surface where the decision is
               # consumed (this let a defect through on one repo while the same change
               # was caught on another).
+              #
+              # Naming only the PRESENT voters was still a silent gate. A docs-only PR
+              # posts a three-voter panel that is indistinguishable from a four-voter
+              # panel with one voter crashed or misconfigured: the reader sees an
+              # absence with no stated cause and cannot tell a deliberate scope rule
+              # from a broken one. So every ABSENT voter now carries its reason, and
+              # the reasons are single-sourced here rather than restated per mode.
+              # >>> coverage-disclosure (executed verbatim by ai-review-coverage-disclosure.test.ts)
               RAN_VOTERS="reviewer"
-              [ "$SECURITY_REQUIRED" = "yes" ] && RAN_VOTERS="$RAN_VOTERS + security"
-              [ "$ARCHITECT_REQUIRED" = "yes" ] && RAN_VOTERS="$RAN_VOTERS + architect"
-              [ "$SKEPTIC_REQUIRED" = "yes" ] && RAN_VOTERS="$RAN_VOTERS + skeptic"
-              if [ "$COVERAGE" = "panel" ]; then
-                COVERAGE_NOTE="Coverage \`$COVERAGE\` — voters that ran: **$RAN_VOTERS**."
+              SKIPPED_VOTERS=""
+              if [ "$SECURITY_REQUIRED" = "yes" ]; then
+                RAN_VOTERS="$RAN_VOTERS + security"
+              elif [ "$CHANGED_OK" = "yes" ]; then
+                SKIPPED_VOTERS="$SKIPPED_VOTERS **security** — docs-only change: every changed file is Markdown, so there is no code surface to review;"
               else
-                COVERAGE_NOTE="⚠️ **Reduced coverage** — \`AI_REVIEW_COVERAGE=$COVERAGE\`, so the architect + skeptic voters did NOT run. Voters that ran: **$RAN_VOTERS**. A \`pass\` here is weaker evidence than a full-panel pass; unset the repo variable to restore the \`panel\` default."
+                # SECURITY_REQUIRED=no has TWO causes: the docs-only scope rule above,
+                # and a change list that could not be read at all (fetch/diff failure).
+                # Claiming "every changed file is Markdown" in the second case would
+                # assert a fact this run explicitly failed to establish — and would
+                # contradict the indeterminate-diff warning printed earlier in this
+                # same comment. The verdict is already fail-closed there; the reason
+                # must be too.
+                SKIPPED_VOTERS="$SKIPPED_VOTERS **security** — the changed-file list could not be read (\`git diff $BASE...$HEAD\` failed), so its docs-vs-code scope rule could not be evaluated;"
               fi
+              if [ "$ARCHITECT_REQUIRED" = "yes" ]; then
+                RAN_VOTERS="$RAN_VOTERS + architect"
+              else
+                SKIPPED_VOTERS="$SKIPPED_VOTERS **architect** — disabled by \`AI_REVIEW_COVERAGE=$COVERAGE\`;"
+              fi
+              if [ "$SKEPTIC_REQUIRED" = "yes" ]; then
+                RAN_VOTERS="$RAN_VOTERS + skeptic"
+              else
+                SKIPPED_VOTERS="$SKIPPED_VOTERS **skeptic** — disabled by \`AI_REVIEW_COVERAGE=$COVERAGE\`;"
+              fi
+              SKIPPED_NOTE=""
+              [ -n "$SKIPPED_VOTERS" ] && SKIPPED_NOTE=" Did NOT run:${SKIPPED_VOTERS%;}."
+              if [ "$COVERAGE" = "panel" ]; then
+                COVERAGE_NOTE="Coverage \`$COVERAGE\` — voters that ran: **$RAN_VOTERS**.$SKIPPED_NOTE"
+              else
+                COVERAGE_NOTE="⚠️ **Reduced coverage** — \`AI_REVIEW_COVERAGE=$COVERAGE\`. Voters that ran: **$RAN_VOTERS**.$SKIPPED_NOTE A \`pass\` here is weaker evidence than a full-panel pass; unset the repo variable to restore the \`panel\` default."
+              fi
+              # <<< coverage-disclosure
               echo "_Independent fresh-context reviewers (\`scripts/review-branch.sh\`, no-tools agents reading the diff as untrusted data); each label decided by the deterministic fail-closed gate (\`scripts/review-decide.sh\`). Posted by \`minspec-sdd[bot]\` from CI — provenance is the App identity, verified here, not the label alone (#428, #342). $COVERAGE_NOTE The combined verdict fails toward \`changes\` if ANY voter requests changes._"
             fi
           } > "$BODY"
@@ -600,6 +831,10 @@ jobs:
           # divergent definition. Empty/missing (review step never completed)
           # defaults to "false" below, never a false machinery exemption.
           IS_MACHINERY: ${{ steps.review.outputs.is_machinery }}
+          # #1728 — the two SHAs the three-dot patch is computed from. GitHub-assigned,
+          # never PR-controlled text.
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -uo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then
@@ -612,6 +847,19 @@ jobs:
           # expression — injection-safe.
           # (NB: an Actions expression written literally here would be evaluated even
           # inside this shell comment — an empty one fails workflow load; #486.)
+          # #1728 — the patch this verdict is ABOUT. Written to a file, not an env var:
+          # a diff can exceed the environment size limit, and a truncated patch would
+          # fingerprint as a different one. A failed diff leaves the file empty, and an
+          # empty patch is never fingerprinted. The fingerprint itself is computed only
+          # when the guard exports both helpers, inside its own try/catch (#1925): this
+          # step runs from the PR head but loads the guard from the BASE checkout (the
+          # head/base skew, #1834), so an older base lacks them, and an unguarded call
+          # threw and lost the whole check-run. Every fingerprint fault now yields only a missing marker, which
+          # degrades to today's behaviour (always re-review), never to a missing
+          # check-run and never to a wrong match.
+          PATCH_FILE="$RUNNER_TEMP/ai-review-patch.txt"
+          git diff "$PR_BASE_SHA...$PR_HEAD_SHA" > "$PATCH_FILE" 2>/dev/null || : > "$PATCH_FILE"
+          export PATCH_FILE
           BODY="$RUNNER_TEMP/ai-review-check.json"
           # BODY MUST be an ENV var (prefix), not a trailing arg: `node -e '…' BODY=x`
           # makes BODY a positional argv, so `process.env.BODY` is undefined and
@@ -621,12 +869,34 @@ jobs:
             const g = require(process.env.GITHUB_WORKSPACE + "/.github/scripts/ai-review-guard.js");
             const c = g.decideReviewCheck(process.env.VERDICT_LABEL || "", process.env.IS_MACHINERY === "true");
             const fs = require("fs");
+            // #1728 — record the THREE-DOT patch fingerprint on the check-run so a
+            // later run can tell "this SHA is new" from "this PATCH is new". A
+            // forward-merge under `strict` changes the former and not the latter.
+            // Recorded here, in App-authored output, for the same reason the witness
+            // lives here: it is server-attested provenance, not a mutable comment (#397).
+            // FEATURE-DETECTED (#1925): the guard comes from the BASE checkout, which
+            // may predate #1728. The marker is optional and the check-run is not, so a
+            // missing helper or a throw yields no marker and the body is still written.
+            let marker = "";
+            if (typeof g.patchFingerprint === "function" && typeof g.renderPatchFingerprint === "function") {
+              try {
+                const fp = g.patchFingerprint(
+                  (() => { try { return fs.readFileSync(process.env.PATCH_FILE, "utf8"); } catch { return ""; } })(),
+                );
+                marker = fp ? "\n\n" + g.renderPatchFingerprint(fp) : "";
+              } catch (e) {
+                marker = "";
+                process.stderr.write("ai-review patch fingerprint not recorded (" + ((e && e.name) || "Error") + "); posting the check-run without it\n");
+              }
+            } else {
+              process.stderr.write("ai-review patch fingerprint not recorded: the base guard does not export both fingerprint helpers (it predates #1728); posting the check-run without it\n");
+            }
             fs.writeFileSync(process.env.BODY, JSON.stringify({
               name: c.name,
               head_sha: process.env.HEAD_SHA,
               status: "completed",
               conclusion: c.conclusion,
-              output: { title: c.title, summary: c.summary },
+              output: { title: c.title, summary: c.summary + marker },
             }));
             process.stderr.write("ai-review verdict=" + (process.env.VERDICT_LABEL || "<none>") + " machinery=" + (process.env.IS_MACHINERY || "false") + " → conclusion=" + c.conclusion + "\n");
           '; then
@@ -796,14 +1066,79 @@ jobs:
             echo "::warning title=ai-review/pass status not posted::Could not post the \`ai-review/pass\` commit status on $PR_HEAD_SHA (usually a missing \`statuses: write\` permission on the minspec-sdd App installation — grant it). The SHA-bound pass witness now falls back to the \`ai-review\` check-run (#810); the gate is not a false green either way."
           fi
 
-          # Apply the decided label FIRST (load-bearing), then clear the other two
-          # verdict labels + the in-progress marker (tolerate their absence).
+          # >>> verdict-label-coherence
+          # #1468 — apply the decided verdict label, clear every OTHER verdict label,
+          # then VERIFY the post-state instead of assuming it.
+          #
+          # Each removal used to be best-effort (`2>/dev/null || true`) with BOTH the
+          # error and the result discarded. One silently-failed removal left the PR
+          # carrying two contradictory verdict labels at once; `ready-to-merge` reads
+          # that as "not passed", so a legitimately-passing PR wedged with nothing on
+          # its surface explaining why (observed on #1430). Constitution invariant 2
+          # forbids exactly that shape: a load-bearing gate signal must not be written
+          # with a swallowed error.
+          #
+          # The rule is the tested pure seam from #1472 (`decideVerdictLabels` /
+          # `verdictLabelFault`), loaded from the trusted base checkout — never
+          # re-implemented in bash, so the two cannot drift. Individual removals stay
+          # tolerant on purpose: the AUTHORITY is the post-state check below, not any
+          # single call. The whole reconcile runs twice so a transient label-API
+          # failure self-heals instead of reddening the run; a post-state that STILL
+          # contradicts fails the step. Loud beats wedged — the backstop then posts
+          # the fail-closed verdict and summons a human.
           gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "$LABEL"
-          for other in ai-review:pass ai-review:changes ai-review:blocked; do
-            [ "$other" = "$LABEL" ] && continue
-            gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "$other" 2>/dev/null || true
+
+          _verdict_labels_now() {
+            gh api "repos/$REPO/issues/$PR_NUMBER/labels" --paginate --jq '.[].name'
+          }
+          # `$2` picks which of the two seams to evaluate; both read the same module.
+          _verdict_rule() {
+            CURRENT="$1" VERDICT="$LABEL" WANT="$2" node -e '
+              const g = require(process.env.GITHUB_WORKSPACE + "/.github/scripts/ai-review-guard.js");
+              const o = {
+                current: (process.env.CURRENT || "").split("\n").filter(Boolean),
+                verdict: process.env.VERDICT,
+              };
+              process.stdout.write(
+                process.env.WANT === "remove"
+                  ? g.decideVerdictLabels(o).remove.join("\n")
+                  : g.verdictLabelFault(o) || "",
+              );
+            '
+          }
+
+          VERDICT_FAULT=""
+          for _attempt in 1 2; do
+            VERDICT_FAULT=""
+            # An unreadable label list is NOT "no labels" — saying so would
+            # misattribute an API failure as a missing label, which is the same class
+            # of lie the swallowed removals told. Distinct message, same fail-closed
+            # outcome: an unverifiable post-state is a fault.
+            if ! CURRENT_LABELS="$(_verdict_labels_now)"; then
+              VERDICT_FAULT="the PR's labels could not be read (GitHub API error), so the verdict post-state is unverifiable"
+            else
+              REMOVE_LABELS="$(_verdict_rule "$CURRENT_LABELS" remove)" || REMOVE_LABELS=""
+              while IFS= read -r _other; do
+                [ -n "$_other" ] || continue
+                gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "$_other" 2>/dev/null || true
+              done <<< "$REMOVE_LABELS"
+
+              if ! CURRENT_LABELS="$(_verdict_labels_now)"; then
+                VERDICT_FAULT="the PR's labels could not be re-read after reconciling them (GitHub API error), so the verdict post-state is unverifiable"
+              else
+                VERDICT_FAULT="$(_verdict_rule "$CURRENT_LABELS" fault)" \
+                  || VERDICT_FAULT="the verdict-label rule could not be evaluated (ai-review-guard.js errored)"
+              fi
+            fi
+            if [ -z "$VERDICT_FAULT" ]; then break; fi
+            if [ "$_attempt" != 2 ]; then sleep 3; fi
           done
-          gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "ai-review:pending" 2>/dev/null || true
+
+          if [ -n "$VERDICT_FAULT" ]; then
+            echo "::error title=ai-review verdict labels are contradictory::$VERDICT_FAULT. \`ready-to-merge\` reads a contradictory verdict-label set as \"not passed\", so leaving it would silently wedge this PR with nothing on its surface explaining why (#1468, observed on #1430). Failing the step instead; the fail-closed backstop below posts the verdict."
+            exit 1
+          fi
+          # <<< verdict-label-coherence
 
           # Summon a human ONLY when a human is GENUINELY the next actor (#816):
           #   • a MACHINERY PR (touches `.github/`/`scripts/`) — a gate cannot certify
@@ -880,8 +1215,23 @@ jobs:
           fi
           gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$(printf '## 🤖 AI review — `ai-review:changes` (fail-closed)\n\nThe AI review workflow errored before producing a clean verdict, so it is requesting changes. This is a fail-closed default — an error must never yield a green. See the [workflow run](%s).\n\n_Posted by minspec-sdd[bot]._' "$RUN_URL")"
           gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "ai-review:changes"
-          gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "ai-review:pass" 2>/dev/null || true
-          gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "ai-review:pending" 2>/dev/null || true
+          # #1468 — clear EVERY other verdict label, not just pass + pending. A PR
+          # sitting on `ai-review:blocked` when the workflow errored used to keep that
+          # label alongside the new `ai-review:changes`, and `ready-to-merge` reads the
+          # contradictory pair as "not passed" — the same wedge, reintroduced by the
+          # very path that exists to be the safe way out of it. The list comes from the
+          # tested seam (#1472) so this and the post step cannot drift; the literal
+          # fallback covers a run where the base checkout is what failed. Everything
+          # here stays best-effort — the honest `exit 1` below is the load-bearing part
+          # and must not be pre-empted by a label call.
+          # >>> backstop-verdict-clear
+          for other in $(node -e '
+            const g = require(process.env.GITHUB_WORKSPACE + "/.github/scripts/ai-review-guard.js");
+            process.stdout.write(g.VERDICT_LABELS.filter((l) => l !== g.CHANGES).join(" "));
+          ' 2>/dev/null || echo "ai-review:pass ai-review:blocked ai-review:pending"); do
+            gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "$other" 2>/dev/null || true
+          done
+          # <<< backstop-verdict-clear
 
           # Fail-closed WORKFLOW ERROR → pull a human in. This is DELIBERATELY kept
           # eager (unlike a normal `ai-review:changes`, whose t=0 human-summon #816
